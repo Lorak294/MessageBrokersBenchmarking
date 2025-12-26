@@ -16,5 +16,6 @@
     <ItemGroup>
       <ProjectReference Include="..\MqBenchmark.Implementations\MqBenchmark.Implementations.csproj" />
       <ProjectReference Include="..\MqBenchmark.Core\MqBenchmark.Core.csproj" />
+      <ProjectReference Include="..\MqBenchmark.Orchestrator\MqBenchmark.Orchestrator.csproj" />
     </ItemGroup>
 </Project>
