@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.MqImplementation;
 
@@ -11,6 +12,8 @@ public class Worker(
 {
     private IMqProducer? _producer;
     private IMqConsumer? _consumer;
+    public Guid Id { get; } = Guid.NewGuid();
+    private WorkerConfig? _config;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -21,49 +24,71 @@ public class Worker(
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
-    public async Task InitializeTestAsync(TestConfig config)
+    public async Task InitializeTestAsync(WorkerConfig config)
     {
-        var role = config.IsConsumer ? "consumer" : "producer";
-        logger.LogInformation($"Initializing benchmark test as {role} ...");
+        var role = config.WorkerRole;
+        logger.LogInformation($"Initializing benchmark test as {role.ToString()} ...");
         var implementation = serviceProvider.GetRequiredKeyedService<IMqImplementation>(config.MqConfig.Implementation);
 
-        if (config.IsConsumer)
+        switch (role)
         {
-            _consumer = implementation.CreateConsumer();
-            await _consumer.InitializeAsync(config);
+            case WorkerConfig.Role.Consumer:
+                _consumer = implementation.CreateConsumer();
+                await _consumer.InitializeAsync(config.MqConfig);
+                break;
+            case WorkerConfig.Role.Producer:
+                _producer = implementation.CreateProducer();
+                await _producer.InitializeAsync(config.MqConfig);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported worker role: {role}");
         }
-        else
-        {
-            _producer = implementation.CreateProducer();
-            await _producer.InitializeAsync(config);
-        }
+        _config = config;
         logger.LogInformation("Benchmark test initialized...");
     }
 
-    public async Task RunTestAsync(TestConfig config)
+    public async Task StartTestAsync()
     {
+        if(_config == null)
+        {
+            throw new InvalidOperationException("Worker configuration is not initialized.");
+        }
+        
         logger.LogInformation("Starting benchmark test...");
+        logger.LogInformation("Test configuration: {Config}", JsonSerializer.Serialize(_config));
 
-        if (config.IsConsumer && _consumer != null)
+        switch (_config.WorkerRole)
         {
-            await ExecuteConsumerTest(config);
-        } 
-        else if (_producer != null)
-        {
-            await ExecuteProducerTest(config);
+            case WorkerConfig.Role.Consumer:
+                if (_consumer == null)
+                    throw new InvalidOperationException("Consumer is not initialized!");
+                await ExecuteConsumerTest();
+                break;
+            case WorkerConfig.Role.Producer:
+                if (_producer == null)
+                    throw new InvalidOperationException("Producer is not initialized!");
+                await ExecuteProducerTest();
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported worker role: {_config.WorkerRole}");
         }
     }
 
-    private async Task ExecuteProducerTest(TestConfig config)
+    private async Task ExecuteProducerTest()
     {
-        var payload = new byte[config.MessageSizeInBytes];
+        if(_config == null)
+        {
+            throw new InvalidOperationException("Worker configuration is not initialized.");
+        }
+        
+        var payload = new byte[_config.MessageSizeInBytes];
         new Random().NextBytes(payload);
         
         if(_producer == null)
             throw new InvalidOperationException("Producer is not initialized!");
 
         var sw = Stopwatch.StartNew();
-        for (int i = 0; i < config.MessageCount; i++)
+        for (int i = 0; i < _config.MessageCount; i++)
         {
             await _producer.SendAsync(new Message { Payload = payload });
             // TODO: add delay logic to ensure sending frequency
@@ -71,16 +96,22 @@ public class Worker(
         sw.Stop();
 
         logger.LogInformation("Producer Finished. Sent {Count} msgs in {S}s", 
-            config.MessageCount, sw.Elapsed.TotalSeconds);
+            _config.MessageCount, sw.Elapsed.TotalSeconds);
     }
 
-    private async Task ExecuteConsumerTest(TestConfig config)
+    private async Task ExecuteConsumerTest()
     {
         int receivedCount = 0;
         var sw = new Stopwatch();
-        
-        if(_consumer == null)
+
+        if (_consumer == null)
+        {
             throw new InvalidOperationException("Consumer is not initialized!");
+        }
+        if(_config == null)
+        {
+            throw new InvalidOperationException("Worker configuration is not initialized.");
+        }
 
         await _consumer.SubscribeAsync(async (data) =>
         {
@@ -88,7 +119,7 @@ public class Worker(
             
             Interlocked.Increment(ref receivedCount);
 
-            if (receivedCount >= config.MessageCount)
+            if (receivedCount >= _config.MessageCount)
             {
                 sw.Stop();
                 logger.LogInformation("Consumer Finished. Received {Count} msgs in {S}s", 

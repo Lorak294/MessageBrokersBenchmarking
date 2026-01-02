@@ -1,43 +1,83 @@
 namespace MqBenchmark.Orchestrator.Services;
 
+public enum WorkerState
+{
+    Connected,
+    Ready,
+    Running,
+    Finished,
+    Disconnected
+}
+
+public class WorkerInfo
+{
+    public Guid WorkerId { get; set; }
+    public string ConnectionId { get; set; } = string.Empty;
+    public WorkerState State { get; set; }
+    public DateTime LastHeartbeat { get; set; }
+}
+
 public class WorkerRegistry
 {
-    private readonly HashSet<string> _connectedWorkerIds = new();
-    private readonly HashSet<string> _readyWorkerIds = new();
+    private readonly Dictionary<Guid, WorkerInfo> _workers = new();
     private TaskCompletionSource? _allWorkersReadyTcs;
     private readonly object _lock = new();
 
     public int ConnectedWorkerCount
     {
-        get { lock(_lock) return _connectedWorkerIds.Count; }
+        get { lock(_lock) return _workers.Count; }
     }
 
-    public void RegisterWorker(string workerId)
+    public void RegisterWorker(Guid workerId, string connectionId)
     {
         lock (_lock)
         {
-            _connectedWorkerIds.Add(workerId);
-        }
-    }
-    
-    public void UnregisterWorker(string workerId)
-    {
-        lock (_lock)
-        {
-            _connectedWorkerIds.Remove(workerId);
-            _readyWorkerIds.Remove(workerId); 
-            CheckReadiness();
-        }
-    }
-    
-    public void MarkWorkerAsReady(string workerId)
-    {
-        lock (_lock)
-        {
-            if (_connectedWorkerIds.Contains(workerId))
+            _workers[workerId] = new WorkerInfo
             {
-                _readyWorkerIds.Add(workerId);
+                WorkerId = workerId,
+                ConnectionId = connectionId,
+                State = WorkerState.Connected,
+                LastHeartbeat = DateTime.UtcNow
+            };
+        }
+    }
+    
+    public void UnregisterWorker(Guid workerId)
+    {
+        lock (_lock)
+        {
+            if (_workers.Remove(workerId))
+            {
+                // TODO: Consider setting state to disconnected instead of removing
                 CheckReadiness();
+            }
+        }
+    }
+    
+    public void UpdateWorkerState(Guid workerId, WorkerState newState)
+    {
+        lock (_lock)
+        {
+            if (_workers.TryGetValue(workerId, out var workerInfo))
+            {
+                workerInfo.State = newState;
+                workerInfo.LastHeartbeat = DateTime.UtcNow;
+                
+                if(newState == WorkerState.Ready)
+                {
+                    CheckReadiness();
+                }
+            }
+        }
+    }
+    
+    public void UpdateHeartbeat(Guid workerId)
+    {
+        lock (_lock)
+        {
+            if (_workers.TryGetValue(workerId, out var workerInfo))
+            {
+                workerInfo.LastHeartbeat = DateTime.UtcNow;
             }
         }
     }
@@ -46,7 +86,14 @@ public class WorkerRegistry
     {
         lock (_lock)
         {
-            _readyWorkerIds.Clear();
+
+            foreach (var worker in _workers.Values)
+            {
+                if(worker.State != WorkerState.Disconnected)
+                {
+                    worker.State = WorkerState.Connected;
+                }
+            }
             _allWorkersReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
@@ -56,18 +103,34 @@ public class WorkerRegistry
         Task task;
         lock (_lock)
         {
-            if (_connectedWorkerIds.Count > 0 && _readyWorkerIds.Count == _connectedWorkerIds.Count)
+            if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Ready))
             {
                 return Task.CompletedTask;
             }
-            task = _allWorkersReadyTcs?.Task ?? Task.CompletedTask;
+            
+            if (_allWorkersReadyTcs == null || _allWorkersReadyTcs.Task.IsCompleted)
+            {
+                _allWorkersReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            
+            task = _allWorkersReadyTcs.Task;
         }
         return task.WaitAsync(timeout);
+    }
+
+    public List<WorkerInfo> GetAllWorkers()
+    {
+        lock (_lock)
+        {
+            // Return a copy to avoid enumeration issues outside the lock
+            return _workers.Values.ToList();
+        }
     }
     
     private void CheckReadiness()
     {
-        if (_connectedWorkerIds.Count > 0 && _readyWorkerIds.Count == _connectedWorkerIds.Count)
+        // Internal helper: assumes lock is already held
+        if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Ready))
         {
             _allWorkersReadyTcs?.TrySetResult();
         }

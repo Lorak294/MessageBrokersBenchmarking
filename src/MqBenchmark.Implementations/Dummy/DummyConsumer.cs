@@ -7,9 +7,9 @@ public class DummyConsumer : IMqConsumer
 {
     private readonly Guid _id = Guid.NewGuid();
     
-    public async Task InitializeAsync(TestConfig configuration)
+    public async Task InitializeAsync(MqConfig configuration)
     {
-        Console.WriteLine($"Consumer {_id} is connecting...");
+        Console.WriteLine($"Consumer {_id} is connecting to {configuration.ConnectionString}...");
         await Task.Delay(100);
         Console.WriteLine($"Consumer {_id} is connected!");
     }

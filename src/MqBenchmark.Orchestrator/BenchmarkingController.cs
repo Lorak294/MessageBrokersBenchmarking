@@ -39,8 +39,9 @@ public class BenchmarkingController : ControllerBase
         
         // reset and broadcast reinitialization to workers
         _workerRegistry.ResetReadiness();
-        await _hubContext.Clients.Group("worker").SendAsync(OrchestratorMethods.InitializeTest, new TestConfig
+        await _hubContext.Clients.Group("worker").SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
         {
+            WorkerRole = WorkerConfig.Role.Producer,
             MessageCount =  request.MessageCount,
             MessageSizeInBytes = request.MessageSizeInBytes,
             MqConfig = request.MqConfig,
@@ -56,5 +57,13 @@ public class BenchmarkingController : ControllerBase
             return StatusCode(504, "Timeout waiting for workers to initialize.");
         }
         return Ok(new { Message = $"Initialized {workerCount} workers successfully." });
+    }
+    
+    [HttpPost("start")]
+    public async Task<IActionResult> Start()
+    {
+        _logger.LogInformation("Starting benchmark test on all workers.");
+        await _hubContext.Clients.Group("worker").SendAsync(OrchestratorMethods.StartTest);
+        return Ok(new { Message = "Benchmark test started on all workers." });
     }
 }

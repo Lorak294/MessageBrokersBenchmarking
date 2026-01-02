@@ -5,6 +5,6 @@ namespace MqBenchmark.Core.MqImplementation;
 
 public interface IMqProducer : IDisposable
 {
-    Task InitializeAsync(TestConfig configuration);
+    Task InitializeAsync(MqConfig configuration);
     Task SendAsync(Message message);
 }
