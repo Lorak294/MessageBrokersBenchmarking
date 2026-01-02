@@ -44,6 +44,9 @@ public class OrchestratorClient : BackgroundService
         {
             _logger.LogInformation($"Received order to start test");
             await _worker.StartTestAsync();
+            
+            _logger.LogInformation("Test finished successfully.");
+            await _connection.InvokeAsync(OrchestratorMethods.WorkerFinished);
         });
     }
     

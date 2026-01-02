@@ -21,6 +21,7 @@ public class WorkerRegistry
 {
     private readonly Dictionary<Guid, WorkerInfo> _workers = new();
     private TaskCompletionSource? _allWorkersReadyTcs;
+    private TaskCompletionSource? _allWorkersFinishedTcs;
     private readonly object _lock = new();
 
     public int ConnectedWorkerCount
@@ -50,6 +51,7 @@ public class WorkerRegistry
             {
                 // TODO: Consider setting state to disconnected instead of removing
                 CheckReadiness();
+                CheckFinish();
             }
         }
     }
@@ -66,6 +68,11 @@ public class WorkerRegistry
                 if(newState == WorkerState.Ready)
                 {
                     CheckReadiness();
+                }
+
+                if (newState == WorkerState.Finished)
+                {
+                    CheckFinish();
                 }
             }
         }
@@ -95,6 +102,7 @@ public class WorkerRegistry
                 }
             }
             _allWorkersReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _allWorkersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
     
@@ -117,6 +125,27 @@ public class WorkerRegistry
         }
         return task.WaitAsync(timeout);
     }
+    
+    public Task WaitForAllWorkersFinishedAsync(TimeSpan timeout)
+    {
+        Task task;
+        lock (_lock)
+        {
+            if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Finished))
+            {
+                return Task.CompletedTask;
+            }
+            
+            if (_allWorkersFinishedTcs == null || _allWorkersFinishedTcs.Task.IsCompleted)
+            {
+                _allWorkersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            
+            task = _allWorkersFinishedTcs.Task;
+        }
+        return task.WaitAsync(timeout);
+    }
+    
 
     public List<WorkerInfo> GetAllWorkers()
     {
@@ -133,6 +162,14 @@ public class WorkerRegistry
         if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Ready))
         {
             _allWorkersReadyTcs?.TrySetResult();
+        }
+    }
+    private void CheckFinish()
+    {
+        // Internal helper: assumes lock is already held
+        if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Finished))
+        {
+            _allWorkersFinishedTcs?.TrySetResult();
         }
     }
 }

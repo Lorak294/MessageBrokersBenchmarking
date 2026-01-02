@@ -8,62 +8,44 @@ namespace MqBenchmark.Orchestrator;
 
 [ApiController]
 [Route("api/[controller]")]
-public class BenchmarkingController : ControllerBase
+public class BenchmarkingController(
+    ILogger<BenchmarkingController> logger,
+    TestScheduler testScheduler)
+    : ControllerBase
 {
-    private readonly ILogger<BenchmarkingController> _logger;
-    private readonly WorkerRegistry _workerRegistry;
-    private readonly IHubContext<OrchestratorHub> _hubContext;
-    
-    public BenchmarkingController(
-        ILogger<BenchmarkingController> logger, 
-        WorkerRegistry workerRegistry, 
-        IHubContext<OrchestratorHub> hubContext)
-    {
-        _logger = logger;
-        _workerRegistry = workerRegistry;
-        _hubContext = hubContext;
-    }
-    
     [HttpPost("initialize")]
     public async Task<IActionResult> Initialize([FromBody] InitializeRequest request)
     {
-        int workerCount = _workerRegistry.ConnectedWorkerCount;
-        if (workerCount == 0)
-        {
-            return BadRequest("No workers connected.");
-        }
+        logger.LogInformation("Initializing test with config: {@TestConfig}", request);
         
-        _logger.LogInformation("Initializing test with config: {@TestConfig}", request);
-        
-        // TODO: split workers into consumers and producers based on request
-        
-        // reset and broadcast reinitialization to workers
-        _workerRegistry.ResetReadiness();
-        await _hubContext.Clients.Group("worker").SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
-        {
-            WorkerRole = WorkerConfig.Role.Producer,
-            MessageCount =  request.MessageCount,
-            MessageSizeInBytes = request.MessageSizeInBytes,
-            MqConfig = request.MqConfig,
-        });
-        
-        // wait for acknowledgments from all workers
         try
         {
-            await _workerRegistry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(30));
+            await testScheduler.InitializeTestAsync(request);
         }
         catch (TimeoutException)
         {
+            logger.LogError("Timeout waiting for workers to acknowledge initialization.");
             return StatusCode(504, "Timeout waiting for workers to initialize.");
         }
-        return Ok(new { Message = $"Initialized {workerCount} workers successfully." });
+        catch (Exception ex)
+        {
+            return StatusCode(500, ex.Message);
+        }
+        return Ok(new { Message = $" Test initialized successfully." });
     }
     
     [HttpPost("start")]
     public async Task<IActionResult> Start()
     {
-        _logger.LogInformation("Starting benchmark test on all workers.");
-        await _hubContext.Clients.Group("worker").SendAsync(OrchestratorMethods.StartTest);
-        return Ok(new { Message = "Benchmark test started on all workers." });
+        logger.LogInformation("Starting benchmark test...");
+        try
+        {
+            await testScheduler.StartTestAsync();
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ex.Message);
+        }
+        return Ok(new { Message = "Benchmark test started successfully." });
     }
 }
