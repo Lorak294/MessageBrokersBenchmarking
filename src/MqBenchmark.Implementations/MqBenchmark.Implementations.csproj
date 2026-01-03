@@ -10,4 +10,9 @@
       <ProjectReference Include="..\MqBenchmark.Core\MqBenchmark.Core.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+      <PackageReference Include="RabbitMQ.Client" Version="7.2.0" />
+    </ItemGroup>
+
 </Project>
