@@ -64,13 +64,16 @@ public class RabbitMqConsumer : IMqConsumer
             try
             {
                 await messageReceivedHandler(message);
-                await _channel.BasicAckAsync(eventArgs.DeliveryTag, false);
+                
+                await ((AsyncEventingBasicConsumer)sender).Channel.BasicAckAsync(eventArgs.DeliveryTag, false);
+                // await _channel.BasicAckAsync(eventArgs.DeliveryTag, false);
             }
             catch
             {
                 // On failure, we nack the message and requeue it for later processing.
                 _logger.LogWarning("Message {MessageId} processing failed - requeuing message.", message.Id);
-                await _channel.BasicNackAsync(eventArgs.DeliveryTag, false, requeue: true);
+                await ((AsyncEventingBasicConsumer)sender).Channel.BasicAckAsync(eventArgs.DeliveryTag, false);
+                // await _channel.BasicNackAsync(eventArgs.DeliveryTag, false, requeue: true);
             }
         };
         
