@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>dotnet-MqBenchmark.Worker-ac4ce965-5ee4-4eda-8e5b-fa20f3c4e5ef</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.2" />
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\MqBenchmark.Implementations\MqBenchmark.Implementations.csproj" />
+      <ProjectReference Include="..\MqBenchmark.Core\MqBenchmark.Core.csproj" />
+    </ItemGroup>
+</Project>
