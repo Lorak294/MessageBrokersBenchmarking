@@ -2,13 +2,14 @@ namespace MqBenchmark.Core.Config;
 
 public class WorkerConfig
 {
-    public enum Role
+    public static class Roles
     {
-        Producer,
-        Consumer
+        public const string Producer = "Producer";
+        public const string Consumer = "Consumer";
+        public const string Unknown = "Unknown";
     }
     
-    public required Role WorkerRole { get; set; }
+    public required string WorkerRole { get; set; }
     public required MqConfig MqConfig { get; set; }
     public required int MessageCount { get; set; }
     public required int MessageSizeInBytes { get; set; }

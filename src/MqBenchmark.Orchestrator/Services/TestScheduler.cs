@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using MqBenchmark.Core.Config;
+using MqBenchmark.Core.Metrics;
 using MqBenchmark.Orchestrator.Contracts;
 
 namespace MqBenchmark.Orchestrator.Services;
@@ -7,6 +8,7 @@ namespace MqBenchmark.Orchestrator.Services;
 public class TestScheduler(
     WorkerRegistry workerRegistry,
     IHubContext<OrchestratorHub> hubContext,
+    TimestampAggregator timestampAggregator,
     ILogger<TestScheduler> logger)
 {
     public async Task InitializeTestAsync(InitializeRequest request)
@@ -18,20 +20,23 @@ public class TestScheduler(
         }
         logger.LogInformation("Initializing test with config: {@TestConfig}", request);
         
+        // Reset timestamp aggregator for new test
+        timestampAggregator.Reset();
+        
         await SplitWorkersAsync(request.ProducersCount, request.ConsumersCount);
         
         // reset and broadcast reinitialization to workers
         workerRegistry.ResetReadiness();
         await hubContext.Clients.Group("producer").SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
         {
-            WorkerRole = WorkerConfig.Role.Producer,
+            WorkerRole = WorkerConfig.Roles.Producer,
             MessageCount =  request.MessageCount,
             MessageSizeInBytes = request.MessageSizeInBytes,
             MqConfig = request.MqConfig,
         });
         await hubContext.Clients.Group("consumer").SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
         {
-            WorkerRole = WorkerConfig.Role.Consumer,
+            WorkerRole = WorkerConfig.Roles.Consumer,
             MessageCount =  request.MessageCount,
             MessageSizeInBytes = request.MessageSizeInBytes,
             MqConfig = request.MqConfig,
@@ -41,7 +46,7 @@ public class TestScheduler(
         await workerRegistry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(30));
     }
     
-    public async Task StartTestAsync()
+    public async Task<BenchmarkResults> StartTestAsync()
     {
         logger.LogInformation("Starting benchmark test on all workers.");
         await hubContext.Clients.Group("consumer").SendAsync(OrchestratorMethods.StartTest);
@@ -51,6 +56,10 @@ public class TestScheduler(
         // TODO: move this to controller? Or make it configurable?
         await workerRegistry.WaitForAllWorkersFinishedAsync(TimeSpan.FromMinutes(30));
         logger.LogInformation("All workers finished.");
+        
+        // Compute and return benchmark results from collected timestamps
+        var results = timestampAggregator.ComputeResults();
+        return results;
     }
 
     private Task SplitWorkersAsync(int producerCount, int consumerCount)

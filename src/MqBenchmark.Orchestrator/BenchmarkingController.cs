@@ -1,6 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
-using MqBenchmark.Core.Config;
 using MqBenchmark.Orchestrator.Contracts;
 using MqBenchmark.Orchestrator.Services;
 
@@ -10,7 +8,8 @@ namespace MqBenchmark.Orchestrator;
 [Route("api/[controller]")]
 public class BenchmarkingController(
     ILogger<BenchmarkingController> logger,
-    TestScheduler testScheduler)
+    TestScheduler testScheduler,
+    TimestampAggregator timestampAggregator)
     : ControllerBase
 {
     [HttpPost("initialize")]
@@ -40,12 +39,52 @@ public class BenchmarkingController(
         logger.LogInformation("Starting benchmark test...");
         try
         {
-            await testScheduler.StartTestAsync();
+            var results = await testScheduler.StartTestAsync();
+            return Ok(new 
+            { 
+                Message = "Benchmark test completed successfully.",
+                Results = results
+            });
         }
         catch (Exception ex)
         {
             return StatusCode(500, ex.Message);
         }
-        return Ok(new { Message = "Benchmark test started successfully." });
+    }
+    
+    /// <summary>
+    /// Gets the aggregated benchmark results from the last completed test.
+    /// </summary>
+    [HttpGet("results")]
+    public IActionResult GetResults()
+    {
+        try
+        {
+            var results = timestampAggregator.ComputeResults();
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error computing benchmark results");
+            return StatusCode(500, ex.Message);
+        }
+    }
+    
+    /// <summary>
+    /// Gets the raw timestamp data from all workers.
+    /// </summary>
+    [HttpGet("timestamps")]
+    public IActionResult GetTimestamps()
+    {
+        try
+        {
+            var timestamps = timestampAggregator.GetAllTimestampData();
+            return Ok(timestamps);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving timestamp data");
+            return StatusCode(500, ex.Message);
+        }
     }
 }
