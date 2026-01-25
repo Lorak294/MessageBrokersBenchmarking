@@ -3,7 +3,6 @@ using MqBenchmark.Core.MqImplementation;
 using MqBenchmark.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddHostedService<Worker>();
 RegisterImplementations(builder.Services);
 
 builder.Services.AddSingleton<Worker>();
