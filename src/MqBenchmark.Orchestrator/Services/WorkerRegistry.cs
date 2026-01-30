@@ -93,13 +93,17 @@ public class WorkerRegistry
     {
         lock (_lock)
         {
+            // Remove workers that disconnected during or between tests
+            var disconnected = _workers.Where(w => w.Value.State == WorkerState.Disconnected)
+                .Select(w => w.Key).ToList();
+            foreach (var id in disconnected)
+            {
+                _workers.Remove(id);
+            }
 
             foreach (var worker in _workers.Values)
             {
-                if(worker.State != WorkerState.Disconnected)
-                {
-                    worker.State = WorkerState.Connected;
-                }
+                worker.State = WorkerState.Connected;
             }
             _allWorkersReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _allWorkersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

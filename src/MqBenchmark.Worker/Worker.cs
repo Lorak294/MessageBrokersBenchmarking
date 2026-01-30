@@ -30,6 +30,9 @@ public class Worker(
 
     public async Task InitializeTestAsync(WorkerConfig config)
     {
+        // Clean up any state from a previous test run
+        await ResetAsync();
+        
         var role = config.WorkerRole;
         logger.LogInformation($"Initializing benchmark test as {role.ToString()} ...");
         var implementation = serviceProvider.GetRequiredKeyedService<IMqImplementation>(config.MqConfig.Implementation);
@@ -55,6 +58,33 @@ public class Worker(
         }
         _config = config;
         logger.LogInformation("Benchmark test initialized...");
+    }
+
+    /// <summary>
+    /// Disposes previous producer/consumer, clears timestamps, and resets all state
+    /// so the worker can be reused for another test run.
+    /// </summary>
+    private Task ResetAsync()
+    {
+        logger.LogInformation("Resetting worker state for new test run...");
+        
+        _config = null;
+        _messageTimestamps = new ConcurrentDictionary<Guid, long>();
+        
+        // Dispose old producer/consumer to release connections/channels
+        // and stop any lingering subscriptions from a previous run.
+        if (_producer != null)
+        {
+            _producer.Dispose();
+            _producer = null;
+        }
+        if (_consumer != null)
+        {
+            _consumer.Dispose();
+            _consumer = null;
+        }
+        
+        return Task.CompletedTask;
     }
 
     public async Task StartTestAsync()
