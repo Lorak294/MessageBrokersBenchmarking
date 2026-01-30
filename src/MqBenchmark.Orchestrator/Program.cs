@@ -10,7 +10,13 @@ builder.Services.AddSingleton<WorkerRegistry>();
 builder.Services.AddSingleton<TimestampAggregator>();
 builder.Services.AddSingleton<TestScheduler>();
 builder.Services.AddControllers();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    // Allow long-running tests without disconnecting workers
+    options.ClientTimeoutInterval = TimeSpan.FromMinutes(OrchestratorConstants.ClientTimeoutIntervalMinutes);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(OrchestratorConstants.ClientKeepAliveIntervalSeconds);
+    options.MaximumReceiveMessageSize = null; // No limit on message size
+});
 
 var app = builder.Build();
 app.MapControllers();

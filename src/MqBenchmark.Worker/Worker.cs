@@ -99,12 +99,10 @@ public class Worker(
         {
             var message = Message.CreateMessage(_config.MessageSizeInBytes);
             
-            // Record timestamp right before sending
-            var timestamp = DateTime.UtcNow.Ticks;
+            // Record timestamp right before sending — this is the correct measurement
+            // point for end-to-end latency (intent to send → consumer receives).
+            _messageTimestamps[message.Id] = DateTime.UtcNow.Ticks;
             await _producer.SendAsync(message);
-            _messageTimestamps[message.Id] = timestamp;
-            
-            // TODO: add delay logic to ensure sending frequency
         }
         sw.Stop();
 
@@ -116,6 +114,7 @@ public class Worker(
     {
         int receivedCount = 0;
         var sw = new Stopwatch();
+        var completionSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         if (_consumer == null)
         {
@@ -126,7 +125,7 @@ public class Worker(
             throw new InvalidOperationException("Worker configuration is not initialized.");
         }
         
-        await _consumer.SubscribeAsync(async (message) =>
+        await _consumer.SubscribeAsync((message) =>
         {
             // Record timestamp immediately upon receiving
             var timestamp = DateTime.UtcNow.Ticks;
@@ -134,17 +133,29 @@ public class Worker(
             
             if (!sw.IsRunning) sw.Start();
             
-            Interlocked.Increment(ref receivedCount);
+            var current = Interlocked.Increment(ref receivedCount);
 
-            if (receivedCount >= _config.MessageCount)
+            if (current >= _config.MessageCount)
             {
                 sw.Stop();
                 logger.LogInformation("Consumer Finished. Received {Count} msgs in {S}s", 
-                    receivedCount, sw.Elapsed.TotalSeconds);
+                    current, sw.Elapsed.TotalSeconds);
+                completionSource.TrySetResult();
             }
             
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         });
+
+        // Wait for all messages to be received, with a timeout to avoid hanging forever
+        var timeout = TimeSpan.FromMinutes(20);
+        var completedTask = await Task.WhenAny(completionSource.Task, Task.Delay(timeout));
+        if (completedTask != completionSource.Task)
+        {
+            sw.Stop();
+            logger.LogWarning(
+                "Consumer timed out after {Timeout}. Received {Count}/{Expected} messages in {S}s",
+                timeout, receivedCount, _config.MessageCount, sw.Elapsed.TotalSeconds);
+        }
     }
     
     public WorkerTimestampData GetTimestampData()

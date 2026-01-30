@@ -8,5 +8,5 @@ public record InitializeRequest
     public int ProducersCount { get; set; }
     public int MessageCount { get; set; }
     public int MessageSizeInBytes { get; set; }
-    public MqConfig MqConfig { get; set; }
+    public required MqConfig MqConfig { get; set; }
 }

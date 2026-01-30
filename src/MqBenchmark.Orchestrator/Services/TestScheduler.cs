@@ -27,14 +27,14 @@ public class TestScheduler(
         
         // reset and broadcast reinitialization to workers
         workerRegistry.ResetReadiness();
-        await hubContext.Clients.Group("producer").SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
+        await hubContext.Clients.Group(OrchestratorConstants.ProducerGroup).SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
         {
             WorkerRole = WorkerConfig.Roles.Producer,
             MessageCount =  request.MessageCount,
             MessageSizeInBytes = request.MessageSizeInBytes,
             MqConfig = request.MqConfig,
         });
-        await hubContext.Clients.Group("consumer").SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
+        await hubContext.Clients.Group(OrchestratorConstants.ConsumerGroup).SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
         {
             WorkerRole = WorkerConfig.Roles.Consumer,
             MessageCount =  request.MessageCount,
@@ -49,8 +49,8 @@ public class TestScheduler(
     public async Task<BenchmarkResults> StartTestAsync()
     {
         logger.LogInformation("Starting benchmark test on all workers.");
-        await hubContext.Clients.Group("consumer").SendAsync(OrchestratorMethods.StartTest);
-        await hubContext.Clients.Group("producer").SendAsync(OrchestratorMethods.StartTest);
+        await hubContext.Clients.Group(OrchestratorConstants.ConsumerGroup).SendAsync(OrchestratorMethods.StartTest);
+        await hubContext.Clients.Group(OrchestratorConstants.ProducerGroup).SendAsync(OrchestratorMethods.StartTest);
         logger.LogInformation("All workers started.");
         
         // TODO: move this to controller? Or make it configurable?
@@ -77,18 +77,18 @@ public class TestScheduler(
             if(i < producerCount)
             {
                 logger.LogInformation("Worker {WorkerID} selected as producer", worker.WorkerId);
-                return hubContext.Groups.RemoveFromGroupAsync(worker.ConnectionId, "consumer")
-                    .ContinueWith(_ => hubContext.Groups.AddToGroupAsync(worker.ConnectionId, "producer"));
+                return hubContext.Groups.RemoveFromGroupAsync(worker.ConnectionId, OrchestratorConstants.ConsumerGroup)
+                    .ContinueWith(_ => hubContext.Groups.AddToGroupAsync(worker.ConnectionId, OrchestratorConstants.ProducerGroup));
             }
             if(i < producerCount + consumerCount)
             {
                 logger.LogInformation("Worker {WorkerID} selected as consumer", worker.WorkerId);
-                return hubContext.Groups.RemoveFromGroupAsync(worker.ConnectionId, "producer")
-                    .ContinueWith(_ => hubContext.Groups.AddToGroupAsync(worker.ConnectionId, "consumer"));
+                return hubContext.Groups.RemoveFromGroupAsync(worker.ConnectionId, OrchestratorConstants.ProducerGroup)
+                    .ContinueWith(_ => hubContext.Groups.AddToGroupAsync(worker.ConnectionId, OrchestratorConstants.ConsumerGroup));
             }
             return Task.WhenAll(
-                hubContext.Groups.RemoveFromGroupAsync(worker.ConnectionId, "producer"),
-                hubContext.Groups.RemoveFromGroupAsync(worker.ConnectionId, "consumer")
+                hubContext.Groups.RemoveFromGroupAsync(worker.ConnectionId, OrchestratorConstants.ProducerGroup),
+                hubContext.Groups.RemoveFromGroupAsync(worker.ConnectionId, OrchestratorConstants.ConsumerGroup)
             ).ContinueWith(_ => 
                 logger.LogInformation("Worker {WorkerId} will remain idle", worker.WorkerId)
             );
