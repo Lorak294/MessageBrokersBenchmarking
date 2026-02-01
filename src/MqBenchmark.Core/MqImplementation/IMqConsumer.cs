@@ -5,7 +5,7 @@ namespace MqBenchmark.Core.MqImplementation;
 
 public interface IMqConsumer : IDisposable
 {
-    Task InitializeAsync(TestConfig configuration);
+    Task InitializeAsync(MqConfig configuration);
 
     Task SubscribeAsync(Func<Message, Task> messageReceivedHandler);
 }
