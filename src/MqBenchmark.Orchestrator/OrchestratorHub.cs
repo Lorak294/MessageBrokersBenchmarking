@@ -8,6 +8,7 @@ public static class OrchestratorMethods
     public const string InitializeTest = "InitializeTest";
     public const string StartTest = "StartTest";
     public const string WorkerReady = "WorkerReady";
+    public const string WorkerFinished = "WorkerFinished";
 }
 
 public static class OrchestratorQueryParams
@@ -16,17 +17,9 @@ public static class OrchestratorQueryParams
     public const string TypeKey = "type";
 }
 
-public class OrchestratorHub : Hub
+public class OrchestratorHub(ILogger<OrchestratorHub> logger, WorkerRegistry workerRegistry)
+    : Hub
 {
-    private readonly ILogger<OrchestratorHub> _logger;
-    private readonly WorkerRegistry _workerRegistry;
-    
-    public OrchestratorHub(ILogger<OrchestratorHub> logger, WorkerRegistry workerRegistry)
-    {
-        _logger = logger;
-        _workerRegistry = workerRegistry;
-    }
-    
     public override async Task OnConnectedAsync()
     {
         var type = Context.GetHttpContext()?.Request.Query[OrchestratorQueryParams.TypeKey].ToString();
@@ -36,8 +29,8 @@ public class OrchestratorHub : Hub
             Context.Items[OrchestratorQueryParams.IdKey] = workerId;
             Context.Items[OrchestratorQueryParams.TypeKey] = type;
 
-            _workerRegistry.RegisterWorker(workerId, Context.ConnectionId);
-            _logger.LogInformation("Client connected: {ConnectionId} as {ConnectionType} (ID: {WorkerId})", 
+            workerRegistry.RegisterWorker(workerId, Context.ConnectionId);
+            logger.LogInformation("Client connected: {ConnectionId} as {ConnectionType} (ID: {WorkerId})", 
                 Context.ConnectionId, type, workerId);
 
             if (!string.IsNullOrEmpty(type))
@@ -47,7 +40,7 @@ public class OrchestratorHub : Hub
         }
         else
         {
-            _logger.LogWarning("Invalid connection attempt without valid 'id'. ConnectionId: {ConnectionId}", Context.ConnectionId);
+            logger.LogWarning("Invalid connection attempt without valid 'id'. ConnectionId: {ConnectionId}", Context.ConnectionId);
             Context.Abort();
             return;
         }
@@ -57,12 +50,12 @@ public class OrchestratorHub : Hub
     
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        _logger.LogInformation("Client disconnected: {ConnectionId}", Context.ConnectionId);
+        logger.LogInformation("Client disconnected: {ConnectionId}", Context.ConnectionId);
         if (Context.Items.TryGetValue(OrchestratorQueryParams.IdKey, out var workerIdObj) && workerIdObj is Guid workerId)
         {
             var type = Context.Items[OrchestratorQueryParams.TypeKey]?.ToString();
-            _workerRegistry.UpdateWorkerState(workerId, WorkerState.Disconnected);
-            _logger.LogInformation("Client disconnected: {WorkerId} type: {ConnectionType}", workerId, type);
+            workerRegistry.UpdateWorkerState(workerId, WorkerState.Disconnected);
+            logger.LogInformation("Client disconnected: {WorkerId} type: {ConnectionType}", workerId, type);
             // SignalR automatically removes connections from Groups on disconnect
         }
         await base.OnDisconnectedAsync(exception);
@@ -73,12 +66,26 @@ public class OrchestratorHub : Hub
     {
         if (Context.Items.TryGetValue(OrchestratorQueryParams.IdKey, out var workerIdObj) && workerIdObj is Guid workerId)
         {
-            _workerRegistry.UpdateWorkerState(workerId, WorkerState.Ready);
-            _logger.LogInformation("Worker {Id} is ready", workerId);
+            workerRegistry.UpdateWorkerState(workerId, WorkerState.Ready);
+            logger.LogInformation("Worker {Id} is ready", workerId);
         }
         else
         {
-            _logger.LogWarning("WorkerReady called from connection {ConnectionId} without known WorkerId.", Context.ConnectionId);
+            logger.LogWarning("WorkerReady called from connection {ConnectionId} without known WorkerId.", Context.ConnectionId);
+        }
+    }
+
+    // Called by workers to indicate they are finished
+    public void WorkerFinished()
+    {
+        if (Context.Items.TryGetValue(OrchestratorQueryParams.IdKey, out var workerIdObj) && workerIdObj is Guid workerId)
+        {
+            workerRegistry.UpdateWorkerState(workerId, WorkerState.Finished);
+            logger.LogInformation("Worker {Id} is ready", workerId);
+        }
+        else
+        {
+            logger.LogWarning("WorkerFinished called from connection {ConnectionId} without known WorkerId.", Context.ConnectionId);
         }
     }
 }
