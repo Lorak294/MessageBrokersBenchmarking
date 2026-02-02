@@ -1,5 +1,6 @@
 using MqBenchmark.Implementations.Dummy;
 using MqBenchmark.Core.MqImplementation;
+using MqBenchmark.Implementations.RabbitMq;
 using MqBenchmark.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -15,5 +16,5 @@ host.Run();
 static void RegisterImplementations(IServiceCollection services)
 {
     services.AddKeyedSingleton<IMqImplementation, DummyImplementation>(DummyImplementation.GetKey());
-    //services.AddKeyedSingleton<IMqImplementation, RabbitMqImplementation>(RabbitMqImplementation.GetKey());
+    services.AddKeyedSingleton<IMqImplementation, RabbitMqImplementation>(RabbitMqImplementation.GetKey());
 }
