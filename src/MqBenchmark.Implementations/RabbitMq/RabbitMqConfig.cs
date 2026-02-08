@@ -39,11 +39,11 @@ public static class MqConfigRabbitMqExtensions
 
 public record RabbitMqConfig
 {
-    public required string Hostname { get; set; }
-    public required int Port { get; set; }
-    public required string Username { get; set; }
-    public required string Password { get; set; }
-    public required string QueueName { get; set; }
-    public required bool DurableMode { get; set; } = false;
-    public required bool QueueAutoDelete { get; set; } = false;
+    public required string Hostname { get; init; }
+    public required int Port { get; init; }
+    public required string Username { get; init; }
+    public required string Password { get; init; }
+    public required string QueueName { get; init; }
+    public required bool DurableMode { get; init; } = false;
+    public required bool QueueAutoDelete { get; init; } = false;
 }

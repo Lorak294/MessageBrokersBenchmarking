@@ -4,6 +4,8 @@ namespace MqBenchmark.Implementations.RabbitMq;
 
 public class RabbitMqImplementation : IMqImplementation
 {
+    public static string GetKey() => "RabbitMQ";
+    
     public IMqConsumer CreateConsumer()
     {
         return new RabbitMqConsumer();
@@ -14,5 +16,4 @@ public class RabbitMqImplementation : IMqImplementation
         return new RabbitMqProducer();
     }
     
-    public static string GetKey() => "RabbitMQ";
 }

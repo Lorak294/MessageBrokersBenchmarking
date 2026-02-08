@@ -59,7 +59,7 @@ public class RabbitMqProducer : IMqProducer
         await _channel.BasicPublishAsync(
             exchange: string.Empty,
             routingKey: _queueName,
-            mandatory: false,
+            mandatory: true,
             basicProperties: properties,
             body: body);
     }
