@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using MqBenchmark.Core.Metrics;
 using MqBenchmark.Orchestrator.Services;
 
 namespace MqBenchmark.Orchestrator;
@@ -9,6 +10,7 @@ public static class OrchestratorMethods
     public const string StartTest = "StartTest";
     public const string WorkerReady = "WorkerReady";
     public const string WorkerFinished = "WorkerFinished";
+    public const string SubmitTimestamps = "SubmitTimestamps";
 }
 
 public static class OrchestratorQueryParams
@@ -17,7 +19,10 @@ public static class OrchestratorQueryParams
     public const string TypeKey = "type";
 }
 
-public class OrchestratorHub(ILogger<OrchestratorHub> logger, WorkerRegistry workerRegistry)
+public class OrchestratorHub(
+    ILogger<OrchestratorHub> logger, 
+    WorkerRegistry workerRegistry,
+    TimestampAggregator timestampAggregator)
     : Hub
 {
     public override async Task OnConnectedAsync()
@@ -86,6 +91,20 @@ public class OrchestratorHub(ILogger<OrchestratorHub> logger, WorkerRegistry wor
         else
         {
             logger.LogWarning("WorkerFinished called from connection {ConnectionId} without known WorkerId.", Context.ConnectionId);
+        }
+    }
+
+    // Called by workers to submit their timestamp data
+    public void SubmitTimestamps(WorkerTimestampData data)
+    {
+        if (Context.Items.TryGetValue(OrchestratorQueryParams.IdKey, out var workerIdObj) && workerIdObj is Guid workerId)
+        {
+            logger.LogInformation("Worker {Id} submitted {Count} timestamps", workerId, data.Timestamps.Count);
+            timestampAggregator.SubmitTimestamps(data);
+        }
+        else
+        {
+            logger.LogWarning("SubmitTimestamps called from connection {ConnectionId} without known WorkerId.", Context.ConnectionId);
         }
     }
 }

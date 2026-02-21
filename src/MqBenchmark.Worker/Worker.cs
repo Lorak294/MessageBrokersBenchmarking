@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using MqBenchmark.Core.Config;
+using MqBenchmark.Core.Metrics;
 using MqBenchmark.Core.MqImplementation;
 
 namespace MqBenchmark.Worker;
@@ -10,10 +12,12 @@ public class Worker(
     IServiceProvider serviceProvider)
     : BackgroundService
 {
+    public Guid Id { get; } = Guid.NewGuid();
     private IMqProducer? _producer;
     private IMqConsumer? _consumer;
-    public Guid Id { get; } = Guid.NewGuid();
     private WorkerConfig? _config;
+    
+    private ConcurrentDictionary<Guid, long> _messageTimestamps = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -30,13 +34,19 @@ public class Worker(
         logger.LogInformation($"Initializing benchmark test as {role.ToString()} ...");
         var implementation = serviceProvider.GetRequiredKeyedService<IMqImplementation>(config.MqConfig.Implementation);
 
+        // Pre-allocate dictionary with expected capacity for better insert performance
+        // Using concurrencyLevel of Environment.ProcessorCount as default
+        _messageTimestamps = new ConcurrentDictionary<Guid, long>(
+            concurrencyLevel: Environment.ProcessorCount,
+            capacity: config.MessageCount);
+
         switch (role)
         {
-            case WorkerConfig.Role.Consumer:
+            case WorkerConfig.Roles.Consumer:
                 _consumer = implementation.CreateConsumer();
                 await _consumer.InitializeAsync(config.MqConfig);
                 break;
-            case WorkerConfig.Role.Producer:
+            case WorkerConfig.Roles.Producer:
                 _producer = implementation.CreateProducer();
                 await _producer.InitializeAsync(config.MqConfig);
                 break;
@@ -59,12 +69,12 @@ public class Worker(
 
         switch (_config.WorkerRole)
         {
-            case WorkerConfig.Role.Consumer:
+            case WorkerConfig.Roles.Consumer:
                 if (_consumer == null)
                     throw new InvalidOperationException("Consumer is not initialized!");
                 await ExecuteConsumerTest();
                 break;
-            case WorkerConfig.Role.Producer:
+            case WorkerConfig.Roles.Producer:
                 if (_producer == null)
                     throw new InvalidOperationException("Producer is not initialized!");
                 await ExecuteProducerTest();
@@ -81,16 +91,19 @@ public class Worker(
             throw new InvalidOperationException("Worker configuration is not initialized.");
         }
         
-        var payload = new byte[_config.MessageSizeInBytes];
-        new Random().NextBytes(payload);
-        
         if(_producer == null)
             throw new InvalidOperationException("Producer is not initialized!");
-
+        
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < _config.MessageCount; i++)
         {
-            await _producer.SendAsync(new Message { Payload = payload });
+            var message = Message.CreateMessage(_config.MessageSizeInBytes);
+            
+            // Record timestamp right before sending
+            var timestamp = DateTime.UtcNow.Ticks;
+            await _producer.SendAsync(message);
+            _messageTimestamps[message.Id] = timestamp;
+            
             // TODO: add delay logic to ensure sending frequency
         }
         sw.Stop();
@@ -112,9 +125,13 @@ public class Worker(
         {
             throw new InvalidOperationException("Worker configuration is not initialized.");
         }
-
-        await _consumer.SubscribeAsync(async (data) =>
+        
+        await _consumer.SubscribeAsync(async (message) =>
         {
+            // Record timestamp immediately upon receiving
+            var timestamp = DateTime.UtcNow.Ticks;
+            _messageTimestamps[message.Id] = timestamp;
+            
             if (!sw.IsRunning) sw.Start();
             
             Interlocked.Increment(ref receivedCount);
@@ -128,5 +145,22 @@ public class Worker(
             
             await Task.CompletedTask;
         });
+    }
+    
+    public WorkerTimestampData GetTimestampData()
+    {
+        var role = _config?.WorkerRole ?? WorkerConfig.Roles.Unknown;
+        var timestamps = _messageTimestamps.Select(kvp => new MessageTimestamp
+        {
+            MessageId = kvp.Key,
+            TimestampTicks = kvp.Value
+        }).ToList();
+
+        return new WorkerTimestampData
+        {
+            WorkerId = Id,
+            Role = role,
+            Timestamps = timestamps
+        };
     }
 }

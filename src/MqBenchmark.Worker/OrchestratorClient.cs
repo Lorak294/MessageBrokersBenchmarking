@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using MqBenchmark.Core.Config;
+using MqBenchmark.Core.Metrics;
 using MqBenchmark.Orchestrator;
 
 namespace MqBenchmark.Worker;
@@ -46,6 +47,12 @@ public class OrchestratorClient : BackgroundService
             await _worker.StartTestAsync();
             
             _logger.LogInformation("Test finished successfully.");
+            
+            // Collect and send timestamp data
+            var timestampData = _worker.GetTimestampData();
+            _logger.LogInformation("Sending {Count} timestamps to orchestrator", timestampData.Timestamps.Count);
+            await _connection.InvokeAsync(OrchestratorMethods.SubmitTimestamps, timestampData);
+            
             await _connection.InvokeAsync(OrchestratorMethods.WorkerFinished);
         });
     }
