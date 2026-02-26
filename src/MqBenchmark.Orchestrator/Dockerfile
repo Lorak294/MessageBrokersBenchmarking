@@ -1,23 +1,22 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
-WORKDIR /app
-EXPOSE 8080
-EXPOSE 8081
-
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-ARG BUILD_CONFIGURATION=Release
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
-COPY ["MessageQueueBenchmarking/MessageQueueBenchmarking.csproj", "MessageQueueBenchmarking/"]
-RUN dotnet restore "MessageQueueBenchmarking/MessageQueueBenchmarking.csproj"
-COPY . .
-WORKDIR "/src/MessageQueueBenchmarking"
-RUN dotnet build "./MessageQueueBenchmarking.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
-FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./MessageQueueBenchmarking.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+# Copy project files and restore
+COPY src/MqBenchmark.Core/MqBenchmark.Core.csproj MqBenchmark.Core/
+COPY src/MqBenchmark.Orchestrator/MqBenchmark.Orchestrator.csproj MqBenchmark.Orchestrator/
+RUN dotnet restore MqBenchmark.Orchestrator/MqBenchmark.Orchestrator.csproj
 
-FROM base AS final
+# Copy source and publish
+COPY src/MqBenchmark.Core/ MqBenchmark.Core/
+COPY src/MqBenchmark.Orchestrator/ MqBenchmark.Orchestrator/
+RUN dotnet publish MqBenchmark.Orchestrator/MqBenchmark.Orchestrator.csproj -c Release -o /app/publish --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "MessageQueueBenchmarking.dll"]
+COPY --from=build /app/publish .
+
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Production
+EXPOSE 8080
+
+ENTRYPOINT ["dotnet", "MqBenchmark.Orchestrator.dll"]

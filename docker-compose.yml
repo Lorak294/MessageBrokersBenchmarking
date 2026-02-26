@@ -1,0 +1,23 @@
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: src/MqBenchmark.Orchestrator/Dockerfile
+    ports:
+      - "8080:8080"
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/MqBenchmark.Worker/Dockerfile
+    environment:
+      - OrchestratorUrl=http://orchestrator:8080/orchestrator
+    depends_on:
+      - orchestrator
+      - rabbitmq
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"

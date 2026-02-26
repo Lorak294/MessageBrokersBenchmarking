@@ -1,3 +1,4 @@
+using MqBenchmark.Core.Constants;
 using MqBenchmark.Orchestrator;
 using MqBenchmark.Orchestrator.Services;
 
@@ -22,14 +23,14 @@ var app = builder.Build();
 app.MapControllers();
 app.MapHub<OrchestratorHub>("/orchestrator");
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
+// if (app.Environment.IsDevelopment())
+// {
     app.MapOpenApi();
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/openapi/v1.json", "OpenAPI v1");
     });
-}
+    //app.UseHttpsRedirection();
+// }
 
-app.UseHttpsRedirection();
 app.Run();
