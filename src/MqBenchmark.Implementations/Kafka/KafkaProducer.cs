@@ -1,5 +1,4 @@
 using Confluent.Kafka;
-using Microsoft.Extensions.Logging;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.MqImplementation;
 
@@ -8,7 +7,8 @@ namespace MqBenchmark.Implementations.Kafka;
 public class KafkaProducer : IMqProducer
 {
     private IProducer<Null, byte[]>? _producer;
-    KafkaConfig? _kafkaConfig;
+    private KafkaConfig? _kafkaConfig;
+    
     public void Dispose()
     {
         _producer?.Flush();
@@ -22,7 +22,10 @@ public class KafkaProducer : IMqProducer
         {
             BootstrapServers = _kafkaConfig.BootstrapServers,
             AllowAutoCreateTopics = true,
-            Acks = Acks.All
+            Acks = _kafkaConfig.Acks,
+            LingerMs = _kafkaConfig.LingerMs,
+            BatchSize = _kafkaConfig.BatchSize,
+            EnableIdempotence = _kafkaConfig.EnableIdempotence
         };
         
         _producer = new ProducerBuilder<Null, byte[]>(producerConfig).Build();
@@ -36,19 +39,25 @@ public class KafkaProducer : IMqProducer
             throw new InvalidOperationException("Producer is not initialized. Call InitializeAsync first.");
         }
 
-        try
+        var kafkaMessage = new Message<Null, byte[]>
         {
-            var deliveryResult = await _producer.ProduceAsync(_kafkaConfig.TopicName, new Message<Null, byte[]>
-            {
-                Value = message.Payload
-            });
-            
-            // TODO: Remove for benchmarking - this adds latency and is not needed for correctness
-            // Console.WriteLine($"Message {message.Id} delivered to {deliveryResult.Topic}, Offset: {deliveryResult.Offset}, Partition: {deliveryResult.Partition}");
+            Value = message.Payload
+        };
+
+        if (_kafkaConfig.UseBufferedProducer)
+        {
+            _producer.Produce(_kafkaConfig.TopicName, kafkaMessage);
         }
-        catch (ProduceException<Null, byte[]> e)
+        else
         {
-            Console.WriteLine($"Failed to produce message to Kafka topic {_kafkaConfig.TopicName}: {e.Error.Reason}");
+            try
+            {
+                await _producer.ProduceAsync(_kafkaConfig.TopicName, kafkaMessage);
+            }
+            catch (ProduceException<Null, byte[]> e)
+            {
+                Console.WriteLine($"Failed to produce message to Kafka topic {_kafkaConfig.TopicName}: {e.Error.Reason}");
+            }
         }
     }
 }
