@@ -1,11 +1,10 @@
 {
   "consumersCount": 1,
   "producersCount": 1,
-  "messageCount": 1000,
+  "messageCount": 10,
   "messageSizeInBytes": 255,
   "mqConfig": {
     "implementation": "Kafka",
-    "connectionString": "dummy",
     "additionalSettings": {
       "BootstrapServers": "kafka:9092",
       "TopicName": "benchmark-topic",

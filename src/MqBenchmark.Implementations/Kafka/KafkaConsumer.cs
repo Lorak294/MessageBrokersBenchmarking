@@ -10,6 +10,7 @@ public class KafkaConsumer : IMqConsumer
     private KafkaConfig? _kafkaConfig;
     private CancellationTokenSource? _consumptionCts;
     private Task? _consumptionTask;
+   
     private bool _disposed;
 
     public void Dispose()
@@ -70,10 +71,12 @@ public class KafkaConsumer : IMqConsumer
 
                     if (consumeResult?.Message != null)
                     {
-                        // Assuming the Payload contains the ID embedded as per previous conversation context,
-                        // or just passing the raw bytes if utilizing the previously discussed Message logic.
                         var messageContent = consumeResult.Message.Value;
                         var message = Message.FromBytes(messageContent);
+                        
+                        // TODO: Remove for benchmarking - this adds latency and is not needed for correctness
+                        // Console.WriteLine($"Message {message.Id} received from {consumeResult.Topic}, Offset: {consumeResult.Offset}, Partition: {consumeResult.Partition}");
+                        
                         await messageReceivedHandler(message);
                     }
                 }

@@ -5,7 +5,6 @@
   "messageSizeInBytes": 255,
   "mqConfig": {
     "implementation": "PgMq",
-    "connectionString": "dummy",
     "additionalSettings": {
       "ConnectionString": "Host=pgmq;Port=5432;Username=postgres;Password=postgres;Database=postgres",
       "QueueName": "benchmark_queue",
