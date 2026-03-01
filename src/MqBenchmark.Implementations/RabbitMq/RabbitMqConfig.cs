@@ -32,7 +32,9 @@ public static class MqConfigRabbitMqExtensions
             Password = GetRequiredSetting("Password"),
             QueueName = GetRequiredSetting("VirtualHost"),
             DurableMode = bool.Parse(GetOptionalSetting("DurableMode", "false")),
-            QueueAutoDelete = bool.Parse(GetOptionalSetting("QueueAutodelete", "false"))
+            QueueAutoDelete = bool.Parse(GetOptionalSetting("QueueAutodelete", "false")),
+            PrefetchCount = ushort.Parse(GetOptionalSetting("PrefetchCount", "100")),
+            ConsumerDispatchConcurrency = ushort.Parse(GetOptionalSetting("ConsumerDispatchConcurrency", "1"))
         };
     }
 }
@@ -46,4 +48,15 @@ public record RabbitMqConfig
     public required string QueueName { get; init; }
     public required bool DurableMode { get; init; } = false;
     public required bool QueueAutoDelete { get; init; } = false;
+    /// <summary>
+    /// Number of messages the broker sends to the consumer before waiting for acks.
+    /// Higher values improve throughput; lower values give fairer dispatch across consumers.
+    /// Default: 100.
+    /// </summary>
+    public ushort PrefetchCount { get; init; } = 100;
+    /// <summary>
+    /// Number of concurrent message handlers dispatched by the client.
+    /// Default: 1 (sequential processing).
+    /// </summary>
+    public ushort ConsumerDispatchConcurrency { get; init; } = 1;
 }

@@ -18,9 +18,19 @@ public class TimestampAggregator
     
     public void SubmitTimestamps(WorkerTimestampData data)
     {
-        _workerTimestamps[data.WorkerId] = data;
-        _logger.LogInformation("Received {Count} timestamps from worker {WorkerId} ({Role})", 
-            data.Timestamps.Count, data.WorkerId, data.Role);
+        _workerTimestamps.AddOrUpdate(
+            data.WorkerId,
+            data,
+            (_, existing) =>
+            {
+                var merged = new List<MessageTimestamp>(existing.Timestamps.Count + data.Timestamps.Count);
+                merged.AddRange(existing.Timestamps);
+                merged.AddRange(data.Timestamps);
+                return existing with { Timestamps = merged };
+            });
+        _logger.LogInformation("Received {Count} timestamps from worker {WorkerId} ({Role}), total now: {Total}", 
+            data.Timestamps.Count, data.WorkerId, data.Role,
+            _workerTimestamps[data.WorkerId].Timestamps.Count);
     }
     
     public void Reset()
