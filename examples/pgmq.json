@@ -10,7 +10,9 @@
       "QueueName": "benchmark_queue",
       "VisibilityTimeout": "30",
       "QueueMode": "NonPartitioned",
-      "MessageReadMode": "Delete"
+      "MessageReadMode": "Delete",
+      "PollIntervalMs": "100",
+      "UsePop": "true"
     }
   }
 }

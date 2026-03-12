@@ -38,10 +38,10 @@ services:
       CLUSTER_ID: MqBenchmarkKafkaClusterId01
     profiles: [kafka]
  
-#  pgmq:
-#    image: quay.io/tembo/pgmq-pg:latest
-#    ports:
-#      - "5432:5432"
-#    environment:
-#      POSTGRES_PASSWORD: postgres
-#    profiles: [pgmq]
+  pgmq:
+    image: ghcr.io/pgmq/pg18-pgmq:v1.11.0
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+    profiles: [pgmq]
