@@ -37,5 +37,5 @@ public record BenchmarkResults
     public double P99LatencyMs { get; init; }
     public double TotalDurationSeconds { get; init; }
     public double MessagesPerSecond { get; init; }
-    public Dictionary<Guid, double>? MessageLatencies { get; init; }
+    public string? ResultsFileName { get; init; }
 }
