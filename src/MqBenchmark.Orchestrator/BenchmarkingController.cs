@@ -9,9 +9,20 @@ namespace MqBenchmark.Orchestrator;
 public class BenchmarkingController(
     ILogger<BenchmarkingController> logger,
     TestScheduler testScheduler,
-    TimestampAggregator timestampAggregator)
+    TimestampAggregator timestampAggregator,
+    WorkerRegistry workerRegistry)
     : ControllerBase
 {
+    /// <summary>
+    /// Gets the list of currently connected workers and their state.
+    /// </summary>
+    [HttpGet("workers")]
+    public IActionResult GetWorkers()
+    {
+        var workers = workerRegistry.GetAllWorkers();
+        return Ok(workers);
+    }
+
     [HttpPost("initialize")]
     public async Task<IActionResult> Initialize([FromBody] InitializeRequest request)
     {

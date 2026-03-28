@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using MqBenchmark.Core.Constants;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.Metrics;
 using MqBenchmark.Orchestrator.Contracts;

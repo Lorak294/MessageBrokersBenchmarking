@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.SignalR.Client;
+using MqBenchmark.Core.Constants;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.Metrics;
-using MqBenchmark.Orchestrator;
 
 namespace MqBenchmark.Worker;
 

@@ -1,0 +1,17 @@
+{
+  "consumersCount": 1,
+  "producersCount": 1,
+  "messageCount": 1000,
+  "messageSizeInBytes": 255,
+  "mqConfig": {
+    "implementation": "RabbitMQ",
+    "connectionString": "dummy",
+    "additionalSettings": {
+      "Hostname": "rabbitmq",
+      "Port": "5672",
+      "Username": "guest",
+      "Password": "guest",
+      "VirtualHost": "myqueue"
+    }
+  }
+}
