@@ -1,0 +1,17 @@
+{
+  "consumersCount": 1,
+  "producersCount": 1,
+  "messageCount": 1000,
+  "messageSizeInBytes": 255,
+  "mqConfig": {
+    "implementation": "PgMq",
+    "connectionString": "dummy",
+    "additionalSettings": {
+      "ConnectionString": "Host=pgmq;Port=5432;Username=postgres;Password=postgres;Database=postgres",
+      "QueueName": "benchmark_queue",
+      "VisibilityTimeout": "30",
+      "QueueMode": "NonPartitioned",
+      "MessageReadMode": "Delete"
+    }
+  }
+}

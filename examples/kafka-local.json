@@ -1,0 +1,15 @@
+{
+  "consumersCount": 1,
+  "producersCount": 1,
+  "messageCount": 1000,
+  "messageSizeInBytes": 255,
+  "mqConfig": {
+    "implementation": "Kafka",
+    "connectionString": "dummy",
+    "additionalSettings": {
+      "BootstrapServers": "localhost:9092",
+      "TopicName": "benchmark-topic",
+      "GroupId": "benchmark-group"
+    }
+  }
+}
