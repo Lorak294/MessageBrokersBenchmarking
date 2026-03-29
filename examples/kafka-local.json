@@ -5,7 +5,6 @@
   "messageSizeInBytes": 255,
   "mqConfig": {
     "implementation": "Kafka",
-    "connectionString": "dummy",
     "additionalSettings": {
       "BootstrapServers": "localhost:9092",
       "TopicName": "benchmark-topic",

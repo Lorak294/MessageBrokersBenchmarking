@@ -5,7 +5,6 @@
   "messageSizeInBytes": 255,
   "mqConfig": {
     "implementation": "RabbitMQ",
-    "connectionString": "dummy",
     "additionalSettings": {
       "Hostname": "localhost",
       "Port": "5672",
