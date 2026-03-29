@@ -6,22 +6,13 @@ public static class MqConfigPgMqExtensions
 {
     public static PgMqConfig ToPgMqConfig(this MqConfig configuration)
     {
-        string GetRequiredSetting(string key)
-        {
-            if (configuration.AdditionalSettings.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-            throw new ArgumentException($"Configuration setting '{key}' is required in AdditionalSettings.");
-        }
-        
         return new PgMqConfig
         {
-            QueueName = GetRequiredSetting("QueueName"),
-            ConnectionString =  GetRequiredSetting("ConnectionString"),
-            VisibilityTimeout = int.Parse(GetRequiredSetting("VisibilityTimeout")),
-            QueueMode = Enum.Parse<PgMqConfig.QueueModeEnum>(GetRequiredSetting("QueueMode")),
-            MessageReadMode = Enum.Parse<PgMqConfig.ReadModeEnum>(GetRequiredSetting("MessageReadMode"))
+            QueueName = configuration.GetRequiredSetting("QueueName"),
+            ConnectionString = configuration.GetRequiredSetting("ConnectionString"),
+            VisibilityTimeout = int.Parse(configuration.GetRequiredSetting("VisibilityTimeout")),
+            QueueMode = Enum.Parse<PgMqConfig.QueueModeEnum>(configuration.GetRequiredSetting("QueueMode")),
+            MessageReadMode = Enum.Parse<PgMqConfig.ReadModeEnum>(configuration.GetRequiredSetting("MessageReadMode"))
         };
     }
 }

@@ -43,8 +43,8 @@ public class KafkaConsumer : IMqConsumer
         {
             BootstrapServers = _kafkaConfig.BootstrapServers,
             GroupId = _kafkaConfig.GroupId,
-            AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = true 
+            AutoOffsetReset = _kafkaConfig.AutoOffsetReset,
+            EnableAutoCommit = _kafkaConfig.EnableAutoCommit
         };
 
         _consumer = new ConsumerBuilder<Null, byte[]>(consumerConfig).Build();
@@ -73,10 +73,6 @@ public class KafkaConsumer : IMqConsumer
                     {
                         var messageContent = consumeResult.Message.Value;
                         var message = Message.FromBytes(messageContent);
-                        
-                        // TODO: Remove for benchmarking - this adds latency and is not needed for correctness
-                        // Console.WriteLine($"Message {message.Id} received from {consumeResult.Topic}, Offset: {consumeResult.Offset}, Partition: {consumeResult.Partition}");
-                        
                         await messageReceivedHandler(message);
                     }
                 }

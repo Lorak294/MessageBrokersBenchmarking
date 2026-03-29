@@ -6,35 +6,17 @@ public static class MqConfigRabbitMqExtensions
 {
     public static RabbitMqConfig ToRabbitMqConfig(this MqConfig configuration)
     {
-        string GetRequiredSetting(string key)
-        {
-            if (configuration.AdditionalSettings.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-            throw new ArgumentException($"Configuration setting '{key}' is required in AdditionalSettings.");
-        }
-        
-        string GetOptionalSetting(string key, string defaultValue)
-        {
-            if (configuration.AdditionalSettings.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-            return defaultValue;
-        }
-        
         return new RabbitMqConfig
         {
-            Hostname = GetRequiredSetting("Hostname"),
-            Port = int.Parse(GetRequiredSetting("Port")),
-            Username = GetRequiredSetting("Username"),
-            Password = GetRequiredSetting("Password"),
-            QueueName = GetRequiredSetting("VirtualHost"),
-            DurableMode = bool.Parse(GetOptionalSetting("DurableMode", "false")),
-            QueueAutoDelete = bool.Parse(GetOptionalSetting("QueueAutodelete", "false")),
-            PrefetchCount = ushort.Parse(GetOptionalSetting("PrefetchCount", "100")),
-            ConsumerDispatchConcurrency = ushort.Parse(GetOptionalSetting("ConsumerDispatchConcurrency", "1"))
+            Hostname = configuration.GetRequiredSetting("Hostname"),
+            Port = int.Parse(configuration.GetRequiredSetting("Port")),
+            Username = configuration.GetRequiredSetting("Username"),
+            Password = configuration.GetRequiredSetting("Password"),
+            QueueName = configuration.GetRequiredSetting("VirtualHost"),
+            DurableMode = bool.Parse(configuration.GetOptionalSetting("DurableMode", "false")),
+            QueueAutoDelete = bool.Parse(configuration.GetOptionalSetting("QueueAutodelete", "false")),
+            PrefetchCount = ushort.Parse(configuration.GetOptionalSetting("PrefetchCount", "100")),
+            ConsumerDispatchConcurrency = ushort.Parse(configuration.GetOptionalSetting("ConsumerDispatchConcurrency", "1"))
         };
     }
 }
