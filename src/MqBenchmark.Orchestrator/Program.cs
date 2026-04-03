@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddHealthChecks();
 builder.Services.AddSingleton<WorkerRegistry>();
 builder.Services.AddSingleton<TimestampAggregator>();
 builder.Services.AddSingleton<TestScheduler>();
@@ -20,6 +21,7 @@ builder.Services.AddSignalR(options =>
 });
 
 var app = builder.Build();
+app.MapHealthChecks("/health");
 app.MapControllers();
 app.MapHub<OrchestratorHub>("/orchestrator");
 // Configure the HTTP request pipeline.
