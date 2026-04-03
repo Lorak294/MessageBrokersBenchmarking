@@ -75,6 +75,6 @@ public class BenchmarkingController(
             return NotFound($"Results file '{fileName}' not found.");
         }
 
-        return PhysicalFile(Path.GetFullPath(filePath), "application/json", fileName);
+        return PhysicalFile(Path.GetFullPath(filePath), "text/csv", fileName);
     }
 }

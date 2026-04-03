@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
+using System.Text;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.Metrics;
 
@@ -8,12 +8,6 @@ namespace MqBenchmark.Orchestrator.Services;
 public class TimestampAggregator
 {
     public const string ResultsDirectory = "results";
-    
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
     
     private readonly ILogger<TimestampAggregator> _logger;
     private readonly ConcurrentDictionary<Guid, WorkerTimestampData> _workerTimestamps = new();
@@ -61,8 +55,8 @@ public class TimestampAggregator
 
         var consumerTimestamps = allTimestamps
             .Where(w => w.Role == WorkerConfig.Roles.Consumer)
-            .SelectMany(w => w.Timestamps)
-            .ToDictionary(t => t.MessageId, t => t.TimestampTicks);
+            .SelectMany(w => w.Timestamps.Select(t => (t, w.WorkerId)))
+            .ToDictionary(x => x.t.MessageId, x => (Ticks: x.t.TimestampTicks, WorkerId: x.WorkerId));
 
         _logger.LogInformation("Computing results: {ProducerCount} sent, {ConsumerCount} received",
             producerTimestamps.Count, consumerTimestamps.Count);
@@ -71,9 +65,9 @@ public class TimestampAggregator
         var latencies = new Dictionary<Guid, double>();
         foreach (var (messageId, sendTicks) in producerTimestamps)
         {
-            if (consumerTimestamps.TryGetValue(messageId, out var receiveTicks))
+            if (consumerTimestamps.TryGetValue(messageId, out var consumer))
             {
-                var latencyMs = (receiveTicks - sendTicks) / (double)TimeSpan.TicksPerMillisecond;
+                var latencyMs = (consumer.Ticks - sendTicks) / (double)TimeSpan.TicksPerMillisecond;
                 latencies[messageId] = latencyMs;
             }
         }
@@ -111,14 +105,13 @@ public class TimestampAggregator
 
         // Calculate total duration (from first send to last receive)
         var firstSendTicks = producerTimestamps.Values.Min();
-        var lastReceiveTicks = consumerTimestamps.Values.Max();
+        var lastReceiveTicks = consumerTimestamps.Values.Max(x => x.Ticks);
         var totalDurationSeconds = (lastReceiveTicks - firstSendTicks) / (double)TimeSpan.TicksPerSecond;
 
-        // Save full results (aggregations + per-message latencies) to file
-        var fileName = $"benchmark_{DateTime.UtcNow:yyyy-MM-dd_HHmmss}.json";
+        // Save raw timestamps to CSV file
+        var fileName = $"benchmark_{DateTime.UtcNow:yyyy-MM-dd_HHmmss}.csv";
         var filePath = Path.Combine(ResultsDirectory, fileName);
-        SaveResultsFile(filePath, latencies, producerTimestamps, consumerTimestamps, sortedLatencies,
-            messagesLost, totalDurationSeconds, GetPercentile);
+        SaveResultsFile(filePath, producerTimestamps, consumerTimestamps);
 
         var results = new BenchmarkResults
         {
@@ -158,34 +151,25 @@ public class TimestampAggregator
 
     private void SaveResultsFile(
         string filePath,
-        Dictionary<Guid, double> latencies,
         Dictionary<Guid, long> producerTimestamps,
-        Dictionary<Guid, long> consumerTimestamps,
-        List<double> sortedLatencies,
-        int messagesLost,
-        double totalDurationSeconds,
-        Func<List<double>, double, double> getPercentile)
+        Dictionary<Guid, (long Ticks, Guid WorkerId)> consumerTimestamps)
     {
-        var fullResults = new
-        {
-            totalMessagesSent = producerTimestamps.Count,
-            totalMessagesReceived = consumerTimestamps.Count,
-            messagesLost,
-            averageLatencyMs = sortedLatencies.Average(),
-            minLatencyMs = sortedLatencies.Min(),
-            maxLatencyMs = sortedLatencies.Max(),
-            p50LatencyMs = getPercentile(sortedLatencies, 50),
-            p95LatencyMs = getPercentile(sortedLatencies, 95),
-            p99LatencyMs = getPercentile(sortedLatencies, 99),
-            totalDurationSeconds,
-            messagesPerSecond = latencies.Count / totalDurationSeconds,
-            messageLatencies = latencies.ToDictionary(
-                kvp => kvp.Key.ToString(),
-                kvp => kvp.Value)
-        };
+        var sb = new StringBuilder();
+        sb.AppendLine("MessageId,SendTimestampTicks,ReceiveTimestampTicks,ConsumerId");
 
-        var json = JsonSerializer.Serialize(fullResults, JsonOptions);
-        File.WriteAllText(filePath, json);
-        _logger.LogInformation("Full results saved to {FilePath} ({Size} bytes)", filePath, json.Length);
+        foreach (var (messageId, sendTicks) in producerTimestamps.OrderBy(kvp => kvp.Value))
+        {
+            if (consumerTimestamps.TryGetValue(messageId, out var consumer))
+            {
+                sb.AppendLine($"{messageId},{sendTicks},{consumer.Ticks},{consumer.WorkerId}");
+            }
+            else
+            {
+                sb.AppendLine($"{messageId},{sendTicks},,");
+            }
+        }
+
+        File.WriteAllText(filePath, sb.ToString());
+        _logger.LogInformation("Results CSV saved to {FilePath}", filePath);
     }
 }
