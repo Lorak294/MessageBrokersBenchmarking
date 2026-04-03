@@ -34,6 +34,7 @@ public class TestScheduler(
             MessageCount =  request.MessageCount,
             MessageSizeInBytes = request.MessageSizeInBytes,
             MqConfig = request.MqConfig,
+            SendFrequencyMps = request.SendFrequencyMps,
         });
         await hubContext.Clients.Group(OrchestratorConstants.ConsumerGroup).SendAsync(OrchestratorMethods.InitializeTest, new WorkerConfig
         {

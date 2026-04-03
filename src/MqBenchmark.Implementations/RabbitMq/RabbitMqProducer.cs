@@ -39,7 +39,7 @@ public class RabbitMqProducer : IMqProducer
             queue: _queueName,
             durable: _durable,
             exclusive: false,
-            autoDelete: false,
+            autoDelete: rabbitConfig.QueueAutoDelete,
             arguments: null
         );
     }

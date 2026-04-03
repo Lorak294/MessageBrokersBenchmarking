@@ -11,10 +11,15 @@ public class RabbitMqConsumer : IMqConsumer
     private IConnection? _connection;
     private IChannel? _channel;
     private string? _queueName;
+    private string? _consumerTag;
     private bool _durable;
 
     public void Dispose()
     {
+        if (_channel is not null && _consumerTag is not null)
+        {
+            try { _channel.BasicCancelAsync(_consumerTag).GetAwaiter().GetResult(); } catch { }
+        }
         _channel?.Dispose();
         _connection?.Dispose();
     }
@@ -39,9 +44,12 @@ public class RabbitMqConsumer : IMqConsumer
             queue: _queueName,
             durable: _durable,
             exclusive: false,
-            autoDelete: false, 
+            autoDelete: rabbitConfig.QueueAutoDelete, 
             arguments: null
         );
+        
+        // Purge any leftover messages from a previous test run
+        await _channel.QueuePurgeAsync(_queueName);
         
         // Allow the broker to send multiple messages before waiting for acks.
         // This avoids a round-trip per message and prevents artificial queue buildup
@@ -78,7 +86,7 @@ public class RabbitMqConsumer : IMqConsumer
             }
         };
         
-        await _channel.BasicConsumeAsync(
+        _consumerTag = await _channel.BasicConsumeAsync(
             queue: _queueName,
             autoAck: false, // Manual ack after processing
             consumer: consumer);

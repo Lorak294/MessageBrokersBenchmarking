@@ -13,5 +13,5 @@ public class WorkerConfig
     public required MqConfig MqConfig { get; set; }
     public required int MessageCount { get; set; }
     public required int MessageSizeInBytes { get; set; }
-    public int? MessagesPerSecondLimit { get; set; }
+    public int? SendFrequencyMps { get; set; }
 }
