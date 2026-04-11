@@ -8,12 +8,12 @@
 
     <ItemGroup>
       <ProjectReference Include="..\MqBenchmark.Core\MqBenchmark.Core.csproj" />
+      <ProjectReference Include="..\MqBenchmark.PgMq.Client\MqBenchmark.PgMq.Client.csproj" />
     </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="Confluent.Kafka" Version="2.13.0" />
       <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
-      <PackageReference Include="Npgmq" Version="1.10.0" />
       <PackageReference Include="RabbitMQ.Client" Version="7.2.0" />
     </ItemGroup>
 

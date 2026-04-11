@@ -1,5 +1,6 @@
 using MqBenchmark.Core.MqImplementation;
 using MqBenchmark.Implementations.Kafka;
+using MqBenchmark.Implementations.PgMq;
 using MqBenchmark.Implementations.RabbitMq;
 using MqBenchmark.Worker;
 
@@ -16,5 +17,6 @@ host.Run();
 static void RegisterImplementations(IServiceCollection services)
 {
     services.AddKeyedSingleton<IMqImplementation, KafkaImplementation>(KafkaImplementation.GetKey());
+    services.AddKeyedSingleton<IMqImplementation, PgMqImplementation>(PgMqImplementation.GetKey());
     services.AddKeyedSingleton<IMqImplementation, RabbitMqImplementation>(RabbitMqImplementation.GetKey());
 }

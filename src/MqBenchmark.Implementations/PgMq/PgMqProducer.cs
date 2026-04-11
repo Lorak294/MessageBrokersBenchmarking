@@ -1,22 +1,40 @@
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.MqImplementation;
+using MqBenchmark.PgMq.Client;
 
 namespace MqBenchmark.Implementations.PgMq;
 
 public class PgMqProducer : IMqProducer
 {
+    private PgmqClient? _pgmqClient;
+    private PgMqConfig? _config;
+
     public void Dispose()
     {
-        throw new NotImplementedException();
+        if (_pgmqClient is not null)
+        {
+            // TODO: Consider changing IMqConsumer to IAsyncDisposable if possible for other implementations as well
+            _pgmqClient.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
     }
 
-    public Task InitializeAsync(MqConfig configuration)
+    public async Task InitializeAsync(MqConfig configuration)
     {
-        throw new NotImplementedException();
+        _config = configuration.ToPgMqConfig();
+        _pgmqClient = new PgmqClient(_config.ConnectionString);
+        await _pgmqClient.OpenAsync();
+        
+        var unlogged = _config.QueueMode == PgMqConfig.QueueModeEnum.Unlogged;
+        await _pgmqClient.CreateQueueAsync(_config.QueueName, unlogged);
     }
 
-    public Task SendAsync(Message message)
+    public async Task SendAsync(Message message)
     {
-        throw new NotImplementedException();
+        if (_pgmqClient is null || _config is null)
+        {
+            throw new InvalidOperationException("Producer is not initialized. Call InitializeAsync first.");
+        }
+
+        await _pgmqClient.SendAsync(_config.QueueName, message.Payload);
     }
 }
