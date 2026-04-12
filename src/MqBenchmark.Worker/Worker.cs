@@ -186,6 +186,11 @@ public class Worker(
                 "Consumer timed out after {Timeout}. Received {Count}/{Expected} messages in {S}s",
                 timeout, receivedCount, _config.MessageCount, sw.Elapsed.TotalSeconds);
         }
+        
+        // Stop the consumer's background loop so it doesn't keep reading after the test ends.
+        // Timestamps are stored on the Worker, so disposing the consumer here is safe.
+        _consumer?.Dispose();
+        _consumer = null;
     }
     
     public WorkerTimestampData GetTimestampData()
