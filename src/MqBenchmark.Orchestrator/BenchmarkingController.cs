@@ -64,38 +64,17 @@ public class BenchmarkingController(
     }
     
     /// <summary>
-    /// Gets the aggregated benchmark results from the last completed test.
+    /// Downloads the full results file (aggregations + per-message latencies) by filename.
     /// </summary>
-    [HttpGet("results")]
-    public IActionResult GetResults()
+    [HttpGet("results/{fileName}")]
+    public IActionResult GetResults(string fileName)
     {
-        try
+        var filePath = timestampAggregator.GetResultsFilePath(fileName);
+        if (filePath is null)
         {
-            var results = timestampAggregator.ComputeResults();
-            return Ok(results);
+            return NotFound($"Results file '{fileName}' not found.");
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error computing benchmark results");
-            return StatusCode(500, ex.Message);
-        }
-    }
-    
-    /// <summary>
-    /// Gets the raw timestamp data from all workers.
-    /// </summary>
-    [HttpGet("timestamps")]
-    public IActionResult GetTimestamps()
-    {
-        try
-        {
-            var timestamps = timestampAggregator.GetAllTimestampData();
-            return Ok(timestamps);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving timestamp data");
-            return StatusCode(500, ex.Message);
-        }
+
+        return PhysicalFile(Path.GetFullPath(filePath), "application/json", fileName);
     }
 }

@@ -13,7 +13,6 @@ public class PgMqProducer : IMqProducer
     {
         if (_pgmqClient is not null)
         {
-            // TODO: Consider changing IMqConsumer to IAsyncDisposable if possible for other implementations as well
             _pgmqClient.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }
@@ -23,9 +22,9 @@ public class PgMqProducer : IMqProducer
         _config = configuration.ToPgMqConfig();
         _pgmqClient = new PgmqClient(_config.ConnectionString);
         await _pgmqClient.OpenAsync();
-        
+
         var unlogged = _config.QueueMode == PgMqConfig.QueueModeEnum.Unlogged;
-        await _pgmqClient.CreateQueueAsync(_config.QueueName, unlogged);
+        await _pgmqClient.Queues.CreateAsync(_config.QueueName, unlogged);
     }
 
     public async Task SendAsync(Message message)
@@ -35,6 +34,13 @@ public class PgMqProducer : IMqProducer
             throw new InvalidOperationException("Producer is not initialized. Call InitializeAsync first.");
         }
 
-        await _pgmqClient.SendAsync(_config.QueueName, message.Payload);
+        if (_config.DelaySeconds > 0)
+        {
+            await _pgmqClient.Send.SendAsync(_config.QueueName, message.Payload, _config.DelaySeconds);
+        }
+        else
+        {
+            await _pgmqClient.Send.SendAsync(_config.QueueName, message.Payload);
+        }
     }
 }

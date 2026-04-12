@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.Metrics;
 
@@ -6,6 +7,14 @@ namespace MqBenchmark.Orchestrator.Services;
 
 public class TimestampAggregator
 {
+    public const string ResultsDirectory = "results";
+    
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+    
     private readonly ILogger<TimestampAggregator> _logger;
     private readonly ConcurrentDictionary<Guid, WorkerTimestampData> _workerTimestamps = new();
     
@@ -14,6 +23,7 @@ public class TimestampAggregator
     public TimestampAggregator(ILogger<TimestampAggregator> logger)
     {
         _logger = logger;
+        Directory.CreateDirectory(ResultsDirectory);
     }
     
     public void SubmitTimestamps(WorkerTimestampData data)
@@ -86,7 +96,6 @@ public class TimestampAggregator
                 P99LatencyMs = 0,
                 TotalDurationSeconds = 0,
                 MessagesPerSecond = 0,
-                MessageLatencies = null
             };
         }
 
@@ -105,6 +114,12 @@ public class TimestampAggregator
         var lastReceiveTicks = consumerTimestamps.Values.Max();
         var totalDurationSeconds = (lastReceiveTicks - firstSendTicks) / (double)TimeSpan.TicksPerSecond;
 
+        // Save full results (aggregations + per-message latencies) to file
+        var fileName = $"benchmark_{DateTime.UtcNow:yyyy-MM-dd_HHmmss}.json";
+        var filePath = Path.Combine(ResultsDirectory, fileName);
+        SaveResultsFile(filePath, latencies, producerTimestamps, consumerTimestamps, sortedLatencies,
+            messagesLost, totalDurationSeconds, GetPercentile);
+
         var results = new BenchmarkResults
         {
             TotalMessagesSent = producerTimestamps.Count,
@@ -118,21 +133,59 @@ public class TimestampAggregator
             P99LatencyMs = GetPercentile(sortedLatencies, 99),
             TotalDurationSeconds = totalDurationSeconds,
             MessagesPerSecond = latencies.Count / totalDurationSeconds,
-            MessageLatencies = latencies
+            ResultsFileName = fileName
         };
 
         _logger.LogInformation(
             "Benchmark Results: Sent={Sent}, Received={Received}, Lost={Lost}, AvgLatency={Avg:F2}ms, " +
-            "P50={P50:F2}ms, P95={P95:F2}ms, P99={P99:F2}ms, Throughput={Throughput:F2} msg/s",
+            "P50={P50:F2}ms, P95={P95:F2}ms, P99={P99:F2}ms, Throughput={Throughput:F2} msg/s, File={File}",
             results.TotalMessagesSent, results.TotalMessagesReceived, results.MessagesLost,
             results.AverageLatencyMs, results.P50LatencyMs, results.P95LatencyMs, results.P99LatencyMs,
-            results.MessagesPerSecond);
+            results.MessagesPerSecond, fileName);
 
         return results;
     }
-    
-    public List<WorkerTimestampData> GetAllTimestampData()
+
+    public string? GetResultsFilePath(string fileName)
     {
-        return _workerTimestamps.Values.ToList();
+        // Prevent path traversal — only allow simple filenames
+        if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
+            return null;
+        
+        var filePath = Path.Combine(ResultsDirectory, fileName);
+        return File.Exists(filePath) ? filePath : null;
+    }
+
+    private void SaveResultsFile(
+        string filePath,
+        Dictionary<Guid, double> latencies,
+        Dictionary<Guid, long> producerTimestamps,
+        Dictionary<Guid, long> consumerTimestamps,
+        List<double> sortedLatencies,
+        int messagesLost,
+        double totalDurationSeconds,
+        Func<List<double>, double, double> getPercentile)
+    {
+        var fullResults = new
+        {
+            totalMessagesSent = producerTimestamps.Count,
+            totalMessagesReceived = consumerTimestamps.Count,
+            messagesLost,
+            averageLatencyMs = sortedLatencies.Average(),
+            minLatencyMs = sortedLatencies.Min(),
+            maxLatencyMs = sortedLatencies.Max(),
+            p50LatencyMs = getPercentile(sortedLatencies, 50),
+            p95LatencyMs = getPercentile(sortedLatencies, 95),
+            p99LatencyMs = getPercentile(sortedLatencies, 99),
+            totalDurationSeconds,
+            messagesPerSecond = latencies.Count / totalDurationSeconds,
+            messageLatencies = latencies.ToDictionary(
+                kvp => kvp.Key.ToString(),
+                kvp => kvp.Value)
+        };
+
+        var json = JsonSerializer.Serialize(fullResults, JsonOptions);
+        File.WriteAllText(filePath, json);
+        _logger.LogInformation("Full results saved to {FilePath} ({Size} bytes)", filePath, json.Length);
     }
 }

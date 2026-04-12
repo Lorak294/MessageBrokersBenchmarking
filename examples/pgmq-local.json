@@ -11,7 +11,11 @@
       "VisibilityTimeout": "30",
       "QueueMode": "NonPartitioned",
       "MessageReadMode": "Delete",
+      "ConsumerMode": "ClientPoll",
       "PollIntervalMs": "100",
+      "MaxPollSeconds": "5",
+      "NotifyThrottleMs": "250",
+      "DelaySeconds": "0",
       "UsePop": "true"
     }
   }
