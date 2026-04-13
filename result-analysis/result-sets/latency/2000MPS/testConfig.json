@@ -1,0 +1,9 @@
+{
+  "title": "Porównanie opóźnień - 2000 wiad./s (2MB/s) 1p-1k",
+  "testConfig": {
+    "messageSizeInBytes": "1024", 
+    "messageCount": "100000",
+    "producersCount": "1",
+    "consumersCount": "1"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "Tryby komunikacji - Point to Point",
+  "testConfig": {
+    "messageSizeInBytes": "1024",
+    "messageCount": "30000",
+    "producersCount": "1",
+    "consumersCount": "3",
+    "consumerGroups": "[1,1,1]",
+    "sendFrequencyMps": "1000",
+    "communicationMode": "PointToPoint"
+  }
+}

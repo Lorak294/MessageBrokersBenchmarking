@@ -14,4 +14,9 @@ public class KafkaImplementation : IMqImplementation
     {
         return new KafkaProducer();
     }
+
+    public IMqJanitor CreateJanitor()
+    {
+        return new KafkaJanitor();
+    }
 }

@@ -3,6 +3,23 @@ namespace MqBenchmark.Core.Config;
 public record MqConfig
 {
     public required string Implementation { get; set; }
+    public CommunicationMode CommunicationMode { get; set; } = CommunicationMode.PointToPoint;
+    
+    /// <summary>
+    /// Logical consumer group identifier (e.g., "group_0", "group_1").
+    /// Set by the orchestrator for each consumer worker.
+    /// </summary>
+    public string? ConsumerGroupName { get; set; }
+    
+    /// <summary>
+    /// Total number of consumer groups in the test. Used by implementations
+    /// to derive infrastructure names when needed.
+    /// </summary>
+    public int ConsumerGroupCount { get; set; }
+    
+    /// <summary>
+    /// Dictionary for any additional implementation-specific settings for given broker.
+    /// </summary>
     public Dictionary<string,string> AdditionalSettings { get; set; } = new();
 
     public string GetRequiredSetting(string key)

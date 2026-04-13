@@ -8,18 +8,22 @@ public static class MqConfigPgMqExtensions
     {
         return new PgMqConfig
         {
-            QueueName = configuration.GetRequiredSetting("QueueName"),
-            ConnectionString = configuration.GetRequiredSetting("ConnectionString"),
-            VisibilityTimeout = int.Parse(configuration.GetRequiredSetting("VisibilityTimeout")),
-            QueueMode = Enum.Parse<PgMqConfig.QueueModeEnum>(configuration.GetRequiredSetting("QueueMode")),
-            MessageReadMode = Enum.Parse<PgMqConfig.ReadModeEnum>(configuration.GetRequiredSetting("MessageReadMode")),
+            ConnectionString = configuration.GetRequiredSetting("connectionString"),
+            VisibilityTimeout = int.Parse(configuration.GetOptionalSetting("visibilityTimeout", "30")),
+            QueueMode = Enum.Parse<PgMqConfig.QueueModeEnum>(
+                configuration.GetOptionalSetting("queueMode", "Default")),
+            MessageReadMode = Enum.Parse<PgMqConfig.ReadModeEnum>(
+                configuration.GetOptionalSetting("messageReadMode", "Delete")),
             ConsumerMode = Enum.Parse<PgMqConfig.ConsumerModeEnum>(
-                configuration.GetOptionalSetting("ConsumerMode", "ClientPoll")),
-            PollIntervalMs = int.Parse(configuration.GetOptionalSetting("PollIntervalMs", "100")),
-            MaxPollSeconds = int.Parse(configuration.GetOptionalSetting("MaxPollSeconds", "5")),
-            NotifyThrottleMs = int.Parse(configuration.GetOptionalSetting("NotifyThrottleMs", "250")),
-            DelaySeconds = int.Parse(configuration.GetOptionalSetting("DelaySeconds", "0")),
-            UsePop = bool.Parse(configuration.GetOptionalSetting("UsePop", "true"))
+                configuration.GetOptionalSetting("consumerMode", "ClientPoll")),
+            PollIntervalMs = int.Parse(configuration.GetOptionalSetting("pollIntervalMs", "5")),
+            MaxPollSeconds = int.Parse(configuration.GetOptionalSetting("maxPollSeconds", "5")),
+            NotifyThrottleMs = int.Parse(configuration.GetOptionalSetting("notifyThrottleMs", "5")),
+            UsePop = bool.Parse(configuration.GetOptionalSetting("usePop", "true")),
+            UseBufferedProducer = bool.Parse(configuration.GetOptionalSetting("useBufferedProducer", "false")),
+            ProducerBatchSize = int.Parse(configuration.GetOptionalSetting("producerBatchSize", "100")),
+            ProducerLingerMs = int.Parse(configuration.GetOptionalSetting("producerLingerMs", "5")),
+            ConsumerBatchSize = int.Parse(configuration.GetOptionalSetting("consumerBatchSize", "1"))
         };
     }
 }
@@ -27,80 +31,58 @@ public static class MqConfigPgMqExtensions
 public record PgMqConfig
 {
     public required string ConnectionString { get; init; }
-    public required string QueueName { get; init; }
     public required int VisibilityTimeout { get; init; }
-
     public required QueueModeEnum QueueMode { get; init; }
     public required ReadModeEnum MessageReadMode { get; init; }
 
-    /// <summary>
-    /// Consumer strategy: ClientPoll (Task.Delay loop), ServerPoll (read_with_poll),
-    /// or ListenNotify (LISTEN/NOTIFY + pop + fallback sweep).
-    /// Default: ClientPoll (backward-compatible with existing behavior).
-    /// </summary>
+    /// <summary>Consumer strategy. Default: ClientPoll.</summary>
     public ConsumerModeEnum ConsumerMode { get; init; } = ConsumerModeEnum.ClientPoll;
 
-    /// <summary>
-    /// Polling interval in milliseconds when no messages are available (ClientPoll mode).
-    /// Also used as poll_interval_ms parameter for ServerPoll mode. Default: 100ms.
-    /// </summary>
-    public int PollIntervalMs { get; init; } = 100;
+    /// <summary>Polling interval in ms when no messages are available. Default: 5ms.</summary>
+    public int PollIntervalMs { get; init; }
 
-    /// <summary>
-    /// Maximum seconds to block in server-side polling (ServerPoll mode).
-    /// Maps to read_with_poll's max_poll_seconds parameter. Default: 5.
-    /// </summary>
-    public int MaxPollSeconds { get; init; } = 5;
+    /// <summary>Maximum seconds to block in server-side polling. Default: 5.</summary>
+    public int MaxPollSeconds { get; init; }
 
-    /// <summary>
-    /// Throttle interval in milliseconds for LISTEN/NOTIFY insert notifications.
-    /// Prevents notification storms during bulk inserts. Default: 250ms.
-    /// </summary>
-    public int NotifyThrottleMs { get; init; } = 250;
+    /// <summary>Throttle interval in ms for LISTEN/NOTIFY notifications. Default: 5ms.</summary>
+    public int NotifyThrottleMs { get; init; }
 
-    /// <summary>
-    /// Delay in seconds before messages become visible after sending.
-    /// 0 means immediate visibility. Default: 0.
-    /// </summary>
-    public int DelaySeconds { get; init; } = 0;
-
-    /// <summary>
-    /// When true and MessageReadMode is Delete, use pgmq.pop() for atomic read+delete in one round-trip.
-    /// When false or when MessageReadMode is Archive, use read()+delete()/archive().
-    /// Default: true.
-    /// </summary>
+    /// <summary>Use pgmq.pop() for atomic read+delete. Default: true.</summary>
     public bool UsePop { get; init; } = true;
 
-    public enum QueueModeEnum
-    {
-        NonPartitioned,
-        Unlogged
-    }
+    /// <summary>Buffer messages and send in batches. Default: false.</summary>
+    public bool UseBufferedProducer { get; init; } = false;
 
-    public enum ReadModeEnum
-    {
-        Delete,
-        Archive
-    }
+    /// <summary>Batch size for buffered producer. Default: 100.</summary>
+    public int ProducerBatchSize { get; init; }
 
-    public enum ConsumerModeEnum
-    {
-        /// <summary>
-        /// Client-side polling with Task.Delay between reads. Simple but adds latency equal to poll interval.
-        /// </summary>
-        ClientPoll,
+    /// <summary>Linger time in ms for buffered producer. Default: 5.</summary>
+    public int ProducerLingerMs { get; init; }
 
-        /// <summary>
-        /// Server-side long-polling via pgmq.read_with_poll(). PostgreSQL blocks and retries internally.
-        /// More efficient than client-side polling — lower latency, fewer round-trips.
-        /// </summary>
-        ServerPoll,
+    /// <summary>Messages to read per consumer round-trip. Default: 1.</summary>
+    public int ConsumerBatchSize { get; init; }
 
-        /// <summary>
-        /// Event-driven via PostgreSQL LISTEN/NOTIFY. Dedicated connection listens for insert notifications,
-        /// then pops messages on the main connection. Includes periodic fallback sweep to catch messages
-        /// missed between throttled notifications.
-        /// </summary>
-        ListenNotify
-    }
+    public enum QueueModeEnum { Default, Unlogged }
+    public enum ReadModeEnum { Delete, Archive }
+    public enum ConsumerModeEnum { ClientPoll, ServerPoll, ListenNotify }
+}
+
+/// <summary>
+/// Auto-generated resource naming conventions for PGMQ.
+/// </summary>
+public static class PgMqNaming
+{
+    private const string Base = "benchmark";
+    
+    /// <summary>Queue name for a specific consumer group (PointToPoint and PubSub).</summary>
+    public static string GroupQueue(string groupName) => $"{Base}_{groupName}";
+    
+    /// <summary>Shared queue name (Streaming mode).</summary>
+    public static string StreamQueue() => $"{Base}_stream";
+    
+    /// <summary>Topic routing key for a specific group (PointToPoint).</summary>
+    public static string GroupRoutingKey(string groupName) => groupName;
+    
+    /// <summary>Broadcast routing key (PubSub) — all queues subscribe to this.</summary>
+    public static string BroadcastRoutingKey() => "broadcast";
 }

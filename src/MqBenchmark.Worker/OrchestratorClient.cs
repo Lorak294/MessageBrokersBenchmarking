@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using MqBenchmark.Core.Constants;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.Metrics;
+using MqBenchmark.Core.MqImplementation;
 
 namespace MqBenchmark.Worker;
 
@@ -30,6 +31,19 @@ public class OrchestratorClient : BackgroundService
         _connection.KeepAliveInterval = TimeSpan.FromSeconds(15);
 
         // Register handlers for orchestrator methods
+        _connection.On<JanitorConfig>(OrchestratorMethods.PrepareInfrastructure, async (janitorConfig) =>
+        {
+            try
+            {
+                await _worker.PrepareInfrastructureAsync(janitorConfig);
+                await _connection.InvokeAsync(OrchestratorMethods.InfrastructureReady);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while preparing infrastructure (janitor).");
+            }
+        });
+
         _connection.On<WorkerConfig>(OrchestratorMethods.InitializeTest, async (testConfig) =>
         {
             try
@@ -41,6 +55,12 @@ public class OrchestratorClient : BackgroundService
             {
                 _logger.LogError(ex, "An error occurred while initializing the worker.");
             }
+        });
+        
+        _connection.On(OrchestratorMethods.ProducersDone, () =>
+        {
+            _logger.LogInformation(">>> Received ProducersDone signal from orchestrator via SignalR");
+            _worker.SignalProducersDone();
         });
         
         // Run the test on a background thread so the SignalR connection can
@@ -55,7 +75,8 @@ public class OrchestratorClient : BackgroundService
                     
                     await _worker.StartTestAsync();
                     
-                    _logger.LogInformation("Test finished successfully.");
+                    _logger.LogInformation("Test finished successfully. Preparing to send timestamps (role: {Role}).", 
+                        _worker.GetTimestampData().Role);
                     
                     // Collect, compress, and send timestamp data in batches
                     var timestampData = _worker.GetTimestampData();
@@ -69,7 +90,7 @@ public class OrchestratorClient : BackgroundService
                         await _connection.InvokeAsync(OrchestratorMethods.SubmitTimestampBatch, batch);
                         _logger.LogDebug("Sent batch {BatchIndex}/{TotalBatches}", batch.BatchIndex + 1, batch.TotalBatches);
                     }
-                    
+                    _logger.LogInformation(">>> Calling WorkerFinished on orchestrator");
                     await _connection.InvokeAsync(OrchestratorMethods.WorkerFinished);
                 }
                 catch (Exception ex)

@@ -19,14 +19,15 @@ public record WorkerTimestampData
     public required Guid WorkerId { get; init; }
     public required string Role { get; init; }
     public required List<MessageTimestamp> Timestamps { get; init; }
+    public int ConsumerGroupIndex { get; init; }
 }
 
 /// <summary>
-/// Aggregated benchmark results computed from producer and consumer timestamps.
+/// Per-consumer-group benchmark results
 /// </summary>
-public record BenchmarkResults
+public record GroupResults
 {
-    public int TotalMessagesSent { get; init; }
+    public int GroupIndex { get; init; }
     public int TotalMessagesReceived { get; init; }
     public int MessagesLost { get; init; }
     public double AverageLatencyMs { get; init; }
@@ -35,7 +36,16 @@ public record BenchmarkResults
     public double P50LatencyMs { get; init; }
     public double P95LatencyMs { get; init; }
     public double P99LatencyMs { get; init; }
+}
+
+/// <summary>
+/// Aggregated benchmark results computed from producer and consumer timestamps.
+/// </summary>
+public record BenchmarkResults
+{
+    public int TotalMessagesSent { get; init; }
     public double TotalDurationSeconds { get; init; }
     public double MessagesPerSecond { get; init; }
     public string? ResultsFileName { get; init; }
+    public required List<GroupResults> PerGroupResults { get; init; }
 }

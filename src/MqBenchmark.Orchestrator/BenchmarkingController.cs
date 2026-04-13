@@ -23,6 +23,9 @@ public class BenchmarkingController(
         return Ok(workers);
     }
 
+    /// <summary>
+    /// Resets broker environment and initializes test scenario based on configuration.
+    /// </summary>
     [HttpPost("initialize")]
     public async Task<IActionResult> Initialize([FromBody] InitializeRequest request)
     {
@@ -44,6 +47,9 @@ public class BenchmarkingController(
         return Ok(new { Message = $" Test initialized successfully." });
     }
     
+    /// <summary>
+    /// Starts execution of currently initialized test scenario.
+    /// </summary>
     [HttpPost("start")]
     public async Task<IActionResult> Start()
     {

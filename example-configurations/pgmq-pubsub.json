@@ -1,0 +1,20 @@
+{
+  "producersCount": 2,
+  "consumerGroups": [2, 2],
+  "communicationMode": "PubSub",
+  "messageCount": 1000,
+  "messageSizeInBytes": 255,
+  "sendFrequencyMps": 200,
+  "mqConfig": {
+    "implementation": "PgMq",
+    "additionalSettings": {
+      "connectionString": "Host=pgmq;Port=5432;Username=postgres;Password=postgres;Database=postgres",
+      "visibilityTimeout": "30",
+      "queueMode": "Default",
+      "messageReadMode": "Delete",
+      "consumerMode": "ClientPoll",
+      "pollIntervalMs": "5",
+      "usePop": "true"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "producersCount": 1,
+  "consumerGroups": [1],
+  "communicationMode": "PointToPoint",
+  "messagesPerConsumerGroup": [10000],
+  "messageSizeInBytes": 1024,
+  "sendFrequencyMps": 200,
+  "mqConfig": {
+    "implementation": "Kafka",
+    "additionalSettings": {
+      "bootstrapServers": "kafka:9092",
+      "lingerMs": "5",
+      "batchSize": "65536",
+      "useBufferedProducer": "true"
+    }
+  }
+}

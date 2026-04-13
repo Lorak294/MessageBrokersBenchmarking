@@ -15,5 +15,9 @@ public class RabbitMqImplementation : IMqImplementation
     {
         return new RabbitMqProducer();
     }
-    
+
+    public IMqJanitor CreateJanitor()
+    {
+        return new RabbitMqJanitor();
+    }
 }

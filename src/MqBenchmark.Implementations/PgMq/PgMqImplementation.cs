@@ -14,4 +14,9 @@ public class PgMqImplementation : IMqImplementation
     {
         return new PgMqProducer();
     }
+
+    public IMqJanitor CreateJanitor()
+    {
+        return new PgMqJanitor();
+    }
 }

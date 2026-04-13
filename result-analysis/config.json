@@ -1,23 +1,19 @@
 {
-  "title": "Throughput Comparison",
-  "testConfig": {
-    "messageSizeInBytes": "10000",
-    "messageCount": "100000",
-    "producersCount": "1",
-    "consumersCount": "1"
+  "outputPath": "output",
+  "throughput": {
+    "title": "Porównanie przepustowości wg rozmiaru wiadomości",
+    "resultsSetsDir": "result-sets/throughput"
   },
-  "resultSets": [
-    {
-      "name": "RabbitMQ",
-      "path": "result-sets/benchmark_rabbitMq.csv"
-    },
-    {
-      "name": "Apache Kafka",
-      "path": "result-sets/benchmark_kafka.csv"
-    },
-    {
-      "name": "PGMQ",
-      "path": "result-sets/benchmark_pgmq.csv"
-    }
-  ]
+  "latency": {
+    "title": "Porównanie opóźnień",
+    "resultsSetsDir": "result-sets/latency"
+  },
+  "messaging-modes": {
+    "title": "Porównanie trybów komunikacji",
+    "resultsSetsDir": "result-sets/messaging-modes"
+  },
+  "pgmq-modes": {
+    "title": "Opóźnienia trybów komunikacji PGMQ",
+    "resultsSetsDir": "result-sets/pgmq-modes"
+  }
 }

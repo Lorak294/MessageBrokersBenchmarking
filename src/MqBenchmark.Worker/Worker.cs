@@ -18,6 +18,20 @@ public class Worker(
     private WorkerConfig? _config;
     
     private ConcurrentDictionary<Guid, long> _messageTimestamps = new();
+    
+    /// <summary>
+    /// Signaled by the orchestrator when all producers have finished sending messages.
+    /// </summary>
+    private readonly TaskCompletionSource _producersDoneTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    
+    /// <summary>
+    /// Called by OrchestratorClient when the ProducersDone signal is received.
+    /// </summary>
+    public void SignalProducersDone()
+    {
+        logger.LogInformation("Received ProducersDone signal from orchestrator.");
+        _producersDoneTcs.TrySetResult();
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -58,6 +72,18 @@ public class Worker(
         }
         _config = config;
         logger.LogInformation("Benchmark test initialized...");
+    }
+
+    public async Task PrepareInfrastructureAsync(JanitorConfig config)
+    {
+        logger.LogInformation("Janitor: Preparing infrastructure for {Implementation} ({Mode})",
+            config.MqConfig.Implementation, config.CommunicationMode);
+        
+        var implementation = serviceProvider.GetRequiredKeyedService<IMqImplementation>(config.MqConfig.Implementation);
+        using var janitor = implementation.CreateJanitor();
+        await janitor.PrepareInfrastructureAsync(config);
+        
+        logger.LogInformation("Janitor: Infrastructure preparation complete.");
     }
 
     /// <summary>
@@ -117,10 +143,7 @@ public class Worker(
     private async Task ExecuteProducerTest()
     {
         if(_config == null)
-        {
             throw new InvalidOperationException("Worker configuration is not initialized.");
-        }
-        
         if(_producer == null)
             throw new InvalidOperationException("Producer is not initialized!");
 
@@ -132,6 +155,11 @@ public class Worker(
         long minSendTicks = long.MaxValue;
         long maxSendTicks = 0;
 
+        // Build round-robin iterator from routing plan (or null for broadcast modes)
+        var routingIterator = _config.RoutingPlan != null
+            ? new RoundRobinRoutingIterator(_config.RoutingPlan)
+            : null;
+
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < _config.MessageCount; i++)
         {
@@ -141,8 +169,10 @@ public class Worker(
             var message = Message.CreateMessage(_config.MessageSizeInBytes);
             _messageTimestamps[message.Id] = DateTime.UtcNow.Ticks;
 
+            var routingTarget = routingIterator?.Next();
+
             var sendStart = Stopwatch.GetTimestamp();
-            await _producer.SendAsync(message);
+            await _producer.SendAsync(message, routingTarget);
             var sendElapsed = Stopwatch.GetTimestamp() - sendStart;
 
             totalSendTicks += sendElapsed;
@@ -163,11 +193,45 @@ public class Worker(
             avgIntervalMs, avgSendMs, minSendMs, maxSendMs);
     }
 
+    /// <summary>
+    /// Round-robins across routing targets, skipping exhausted ones.
+    /// </summary>
+    private class RoundRobinRoutingIterator
+    {
+        private readonly (string target, int remaining)[] _targets;
+        private int _currentIndex;
+
+        public RoundRobinRoutingIterator(RoutingPlan plan)
+        {
+            _targets = plan.Targets.Select(t => (t.Target, t.MessageCount)).ToArray();
+            _currentIndex = 0;
+        }
+
+        public string Next()
+        {
+            // Find next target with remaining messages
+            for (int attempts = 0; attempts < _targets.Length; attempts++)
+            {
+                var idx = _currentIndex % _targets.Length;
+                if (_targets[idx].remaining > 0)
+                {
+                    _targets[idx].remaining--;
+                    _currentIndex = idx + 1;
+                    return _targets[idx].target;
+                }
+                _currentIndex++;
+            }
+            // All exhausted — shouldn't happen if MessageCount matches plan total
+            return _targets[0].target;
+        }
+    }
+
     private async Task ExecuteConsumerTest()
     {
         int receivedCount = 0;
         var sw = new Stopwatch();
         var completionSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        long lastMessageAtTicks = 0;
 
         if (_consumer == null)
         {
@@ -178,6 +242,8 @@ public class Worker(
             throw new InvalidOperationException("Worker configuration is not initialized.");
         }
         
+        var idleTimeout = TimeSpan.FromSeconds(_config.ConsumerIdleTimeoutSeconds);
+        
         await _consumer.SubscribeAsync((message) =>
         {
             // Record timestamp immediately upon receiving
@@ -186,32 +252,67 @@ public class Worker(
             
             if (!sw.IsRunning) sw.Start();
             
-            var current = Interlocked.Increment(ref receivedCount);
-
-            if (current >= _config.MessageCount)
-            {
-                sw.Stop();
-                logger.LogInformation("Consumer Finished. Received {Count} msgs in {S}s", 
-                    current, sw.Elapsed.TotalSeconds);
-                completionSource.TrySetResult();
-            }
+            var count = Interlocked.Increment(ref receivedCount);
+            Interlocked.Exchange(ref lastMessageAtTicks, Stopwatch.GetTimestamp());
+            
+            if (count % 100 == 0)
+                logger.LogDebug("Consumer received {Count} messages so far", count);
             
             return Task.CompletedTask;
         });
 
-        // Wait for all messages to be received, with a timeout to avoid hanging forever
-        var timeout = TimeSpan.FromMinutes(20);
-        var completedTask = await Task.WhenAny(completionSource.Task, Task.Delay(timeout));
-        if (completedTask != completionSource.Task)
+        logger.LogInformation(">>> Consumer subscribed. Waiting for ProducersDone signal...");
+        
+        // Wait for ProducersDone signal first (with hard safety timeout)
+        var hardTimeout = TimeSpan.FromMinutes(20);
+        var hardTimeoutTask = Task.Delay(hardTimeout);
+        
+        var producersDoneOrTimeout = await Task.WhenAny(_producersDoneTcs.Task, hardTimeoutTask);
+        if (producersDoneOrTimeout == hardTimeoutTask)
         {
             sw.Stop();
             logger.LogWarning(
-                "Consumer timed out after {Timeout}. Received {Count}/{Expected} messages in {S}s",
-                timeout, receivedCount, _config.MessageCount, sw.Elapsed.TotalSeconds);
+                "Consumer timed out waiting for ProducersDone after {Timeout}. Received {Count} messages in {S}s",
+                hardTimeout, receivedCount, sw.Elapsed.TotalSeconds);
+            _consumer?.Dispose();
+            _consumer = null;
+            return;
         }
         
+        // Producers are done — now wait for idle timeout (no messages for N seconds)
+        logger.LogInformation(">>> ProducersDone signal received. Received {Count} messages so far. Entering idle drain (timeout={Timeout}s)...", 
+            receivedCount, _config.ConsumerIdleTimeoutSeconds);
+        
+        // Set initial "last message" to now if we haven't received anything yet
+        Interlocked.CompareExchange(ref lastMessageAtTicks, Stopwatch.GetTimestamp(), 0);
+        
+        while (true)
+        {
+            await Task.Delay(500); // Check every 500ms
+            
+            var lastTicks = Interlocked.Read(ref lastMessageAtTicks);
+            var elapsed = Stopwatch.GetElapsedTime(lastTicks);
+            
+            if (elapsed >= idleTimeout)
+            {
+                logger.LogInformation(">>> Idle timeout reached ({Elapsed}ms since last message). Received {Count} total messages.", 
+                    elapsed.TotalMilliseconds, receivedCount);
+                break;
+            }
+            
+            // Safety: also break on hard timeout
+            if (hardTimeoutTask.IsCompleted)
+            {
+                logger.LogWarning("Hard timeout reached during idle drain.");
+                break;
+            }
+        }
+        
+        sw.Stop();
+        logger.LogInformation("Consumer Finished. Received {Count} msgs in {S}s", 
+            receivedCount, sw.Elapsed.TotalSeconds);
+        
         // Stop the consumer's background loop so it doesn't keep reading after the test ends.
-        // Timestamps are stored on the Worker, so disposing the consumer here is safe.
         _consumer?.Dispose();
         _consumer = null;
     }
@@ -229,7 +330,16 @@ public class Worker(
         {
             WorkerId = Id,
             Role = role,
-            Timestamps = timestamps
+            Timestamps = timestamps,
+            ConsumerGroupIndex = ParseGroupIndex(_config?.MqConfig.ConsumerGroupName)
         };
+    }
+
+    private static int ParseGroupIndex(string? groupName)
+    {
+        if (groupName == null) return 0;
+        // Expected format: "group_0", "group_1", etc.
+        var parts = groupName.Split('_');
+        return parts.Length >= 2 && int.TryParse(parts[^1], out var idx) ? idx : 0;
     }
 }
