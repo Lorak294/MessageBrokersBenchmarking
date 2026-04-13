@@ -12,8 +12,8 @@ Brokers, workers and orchestrattor are constrained to fixed resources (CPU/memor
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   Orchestrator                       │
-│         (ASP.NET + SignalR Hub + REST API)           │
+│                   Orchestrator                      │
+│         (ASP.NET + SignalR Hub + REST API)          │
 │   - Assigns roles (Producer/Consumer/Janitor)       │
 │   - Generates routing plans & group assignments     │
 │   - Aggregates timestamps → computes results        │
