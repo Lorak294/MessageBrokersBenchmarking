@@ -7,7 +7,7 @@ namespace MqBenchmark.PgMq.Client.Operations;
 /// Delete operations: delete single messages and batches by ID.
 /// Batch delete returns the IDs of successfully deleted messages (long[]).
 /// </summary>
-public sealed class DeleteOperations : PgmqOperationsBase
+public sealed class DeleteOperations : PgmqOperationsBase, IDeleteOperations
 {
     private readonly CommandSlot _deleteSlot = Slot();
     private readonly CommandSlot _deleteBatchSlot = Slot();

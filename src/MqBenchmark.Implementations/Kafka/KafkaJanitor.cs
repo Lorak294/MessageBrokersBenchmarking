@@ -9,13 +9,23 @@ public class KafkaJanitor : IMqJanitor
 {
     private IAdminClient? _adminClient;
 
+    public KafkaJanitor() { }
+
+    internal KafkaJanitor(IAdminClient adminClient)
+    {
+        _adminClient = adminClient;
+    }
+
     public async Task PrepareInfrastructureAsync(JanitorConfig config)
     {
         var kafkaConfig = config.MqConfig.ToKafkaConfig();
 
-        _adminClient = new AdminClientBuilder(
-            new AdminClientConfig { BootstrapServers = kafkaConfig.BootstrapServers })
-            .Build();
+        if (_adminClient is null)
+        {
+            _adminClient = new AdminClientBuilder(
+                new AdminClientConfig { BootstrapServers = kafkaConfig.BootstrapServers })
+                .Build();
+        }
 
         switch (config.CommunicationMode)
         {
@@ -64,8 +74,9 @@ public class KafkaJanitor : IMqJanitor
         }
     }
 
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
         _adminClient?.Dispose();
+        return ValueTask.CompletedTask;
     }
 }

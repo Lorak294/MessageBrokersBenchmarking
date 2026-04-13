@@ -80,7 +80,7 @@ public class Worker(
             config.MqConfig.Implementation, config.CommunicationMode);
         
         var implementation = serviceProvider.GetRequiredKeyedService<IMqImplementation>(config.MqConfig.Implementation);
-        using var janitor = implementation.CreateJanitor();
+        await using var janitor = implementation.CreateJanitor();
         await janitor.PrepareInfrastructureAsync(config);
         
         logger.LogInformation("Janitor: Infrastructure preparation complete.");
@@ -90,7 +90,7 @@ public class Worker(
     /// Disposes previous producer/consumer, clears timestamps, and resets all state
     /// so the worker can be reused for another test run.
     /// </summary>
-    private Task ResetAsync()
+    private async Task ResetAsync()
     {
         logger.LogInformation("Resetting worker state for new test run...");
         
@@ -101,16 +101,14 @@ public class Worker(
         // and stop any lingering subscriptions from a previous run.
         if (_producer != null)
         {
-            _producer.Dispose();
+            await _producer.DisposeAsync();
             _producer = null;
         }
         if (_consumer != null)
         {
-            _consumer.Dispose();
+            await _consumer.DisposeAsync();
             _consumer = null;
         }
-        
-        return Task.CompletedTask;
     }
 
     public async Task StartTestAsync()
@@ -196,7 +194,7 @@ public class Worker(
     /// <summary>
     /// Round-robins across routing targets, skipping exhausted ones.
     /// </summary>
-    private class RoundRobinRoutingIterator
+    internal class RoundRobinRoutingIterator
     {
         private readonly (string target, int remaining)[] _targets;
         private int _currentIndex;
@@ -274,7 +272,7 @@ public class Worker(
             logger.LogWarning(
                 "Consumer timed out waiting for ProducersDone after {Timeout}. Received {Count} messages in {S}s",
                 hardTimeout, receivedCount, sw.Elapsed.TotalSeconds);
-            _consumer?.Dispose();
+            if (_consumer is not null) await _consumer.DisposeAsync();
             _consumer = null;
             return;
         }
@@ -313,7 +311,7 @@ public class Worker(
             receivedCount, sw.Elapsed.TotalSeconds);
         
         // Stop the consumer's background loop so it doesn't keep reading after the test ends.
-        _consumer?.Dispose();
+        if (_consumer is not null) await _consumer.DisposeAsync();
         _consumer = null;
     }
     

@@ -12,31 +12,41 @@ public class RabbitMqProducer : IMqProducer
     private CommunicationMode _communicationMode;
     private string _publishExchange = string.Empty;
 
-    public void Dispose()
+    public RabbitMqProducer() { }
+
+    internal RabbitMqProducer(IChannel channel)
     {
-        _channel?.Dispose();
-        _connection?.Dispose();
+        _channel = channel;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_channel is not null) await _channel.DisposeAsync();
+        if (_connection is not null) await _connection.DisposeAsync();
     }
 
     public async Task InitializeAsync(MqConfig configuration)
     {
         _rabbitConfig = configuration.ToRabbitMqConfig();
         _communicationMode = configuration.CommunicationMode;
-        
-        var factory = new ConnectionFactory
+
+        if (_channel is null)
         {
-            HostName = _rabbitConfig.Hostname,
-            UserName = _rabbitConfig.Username,
-            Password = _rabbitConfig.Password,
-            Port = _rabbitConfig.Port
-        };
+            var factory = new ConnectionFactory
+            {
+                HostName = _rabbitConfig.Hostname,
+                UserName = _rabbitConfig.Username,
+                Password = _rabbitConfig.Password,
+                Port = _rabbitConfig.Port
+            };
 
-        _connection = await factory.CreateConnectionAsync();
+            _connection = await factory.CreateConnectionAsync();
 
-        var channelOptions = new CreateChannelOptions(
-            publisherConfirmationsEnabled: _rabbitConfig.PublisherConfirms,
-            publisherConfirmationTrackingEnabled: _rabbitConfig.PublisherConfirms);
-        _channel = await _connection.CreateChannelAsync(channelOptions);
+            var channelOptions = new CreateChannelOptions(
+                publisherConfirmationsEnabled: _rabbitConfig.PublisherConfirms,
+                publisherConfirmationTrackingEnabled: _rabbitConfig.PublisherConfirms);
+            _channel = await _connection.CreateChannelAsync(channelOptions);
+        }
 
         switch (_communicationMode)
         {

@@ -9,20 +9,30 @@ public class RabbitMqJanitor : IMqJanitor
     private IConnection? _connection;
     private IChannel? _channel;
 
+    public RabbitMqJanitor() { }
+
+    internal RabbitMqJanitor(IChannel channel)
+    {
+        _channel = channel;
+    }
+
     public async Task PrepareInfrastructureAsync(JanitorConfig config)
     {
         var rabbitConfig = config.MqConfig.ToRabbitMqConfig();
 
-        var factory = new ConnectionFactory
+        if (_channel is null)
         {
-            HostName = rabbitConfig.Hostname,
-            UserName = rabbitConfig.Username,
-            Password = rabbitConfig.Password,
-            Port = rabbitConfig.Port
-        };
+            var factory = new ConnectionFactory
+            {
+                HostName = rabbitConfig.Hostname,
+                UserName = rabbitConfig.Username,
+                Password = rabbitConfig.Password,
+                Port = rabbitConfig.Port
+            };
 
-        _connection = await factory.CreateConnectionAsync();
-        _channel = await _connection.CreateChannelAsync();
+            _connection = await factory.CreateConnectionAsync();
+            _channel = await _connection.CreateChannelAsync();
+        }
 
         switch (config.CommunicationMode)
         {
@@ -113,9 +123,9 @@ public class RabbitMqJanitor : IMqJanitor
             arguments: streamArgs);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _channel?.Dispose();
-        _connection?.Dispose();
+        if (_channel is not null) await _channel.DisposeAsync();
+        if (_connection is not null) await _connection.DisposeAsync();
     }
 }

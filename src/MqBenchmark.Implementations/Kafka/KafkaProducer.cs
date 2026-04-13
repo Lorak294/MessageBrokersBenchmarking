@@ -9,11 +9,19 @@ public class KafkaProducer : IMqProducer
     private IProducer<Null, byte[]>? _producer;
     private KafkaConfig? _kafkaConfig;
     private CommunicationMode _communicationMode;
+
+    public KafkaProducer() { }
+
+    internal KafkaProducer(IProducer<Null, byte[]> producer)
+    {
+        _producer = producer;
+    }
     
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
         _producer?.Flush();
         _producer?.Dispose();
+        return ValueTask.CompletedTask;
     }
 
     public Task InitializeAsync(MqConfig configuration)
@@ -21,13 +29,16 @@ public class KafkaProducer : IMqProducer
         _kafkaConfig = configuration.ToKafkaConfig();
         _communicationMode = configuration.CommunicationMode;
         
-        _producer = new ProducerBuilder<Null, byte[]>(new ProducerConfig
+        if (_producer is null)
         {
-            BootstrapServers = _kafkaConfig.BootstrapServers,
-            Acks = Acks.All,
-            LingerMs = _kafkaConfig.LingerMs,
-            BatchSize = _kafkaConfig.BatchSize
-        }).Build();
+            _producer = new ProducerBuilder<Null, byte[]>(new ProducerConfig
+            {
+                BootstrapServers = _kafkaConfig.BootstrapServers,
+                Acks = Acks.All,
+                LingerMs = _kafkaConfig.LingerMs,
+                BatchSize = _kafkaConfig.BatchSize
+            }).Build();
+        }
         
         return Task.CompletedTask;
     }

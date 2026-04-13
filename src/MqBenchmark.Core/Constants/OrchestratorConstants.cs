@@ -9,6 +9,7 @@ public static class OrchestratorMethods
     public const string StartTest = "StartTest";
     public const string WorkerReady = "WorkerReady";
     public const string WorkerFinished = "WorkerFinished";
+    public const string ProducerDone = "ProducerDone";
     public const string SubmitTimestampBatch = "SubmitTimestampBatch";
     public const string ProducersDone = "ProducersDone";
     public const string PrepareInfrastructure = "PrepareInfrastructure";

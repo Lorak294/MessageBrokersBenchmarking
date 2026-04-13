@@ -7,7 +7,7 @@ namespace MqBenchmark.PgMq.Client.Operations;
 /// Archive operations: move messages from the queue table to the archive table.
 /// Batch archive returns the IDs of successfully archived messages (long[]).
 /// </summary>
-public sealed class ArchiveOperations : PgmqOperationsBase
+public sealed class ArchiveOperations : PgmqOperationsBase, IArchiveOperations
 {
     private readonly CommandSlot _archiveSlot = Slot();
     private readonly CommandSlot _archiveBatchSlot = Slot();

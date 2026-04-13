@@ -6,7 +6,7 @@ namespace MqBenchmark.Implementations.PgMq;
 
 public class PgMqProducer : IMqProducer
 {
-    private PgmqClient? _pgmqClient;
+    private IPgmqClient? _pgmqClient;
     private PgMqConfig? _config;
     private CommunicationMode _communicationMode;
 
@@ -17,17 +17,24 @@ public class PgMqProducer : IMqProducer
     private bool _timerRunning;
     private string? _lastRoutingTarget; // Track current target for buffered flush
 
-    public void Dispose()
+    public PgMqProducer() { }
+
+    internal PgMqProducer(IPgmqClient pgmqClient)
+    {
+        _pgmqClient = pgmqClient;
+    }
+
+    public async ValueTask DisposeAsync()
     {
         _lingerTimer?.Dispose();
 
         if (_config?.UseBufferedProducer == true && _buffer.Count > 0)
         {
-            _bufferSemaphore.Wait();
+            await _bufferSemaphore.WaitAsync();
             try
             {
                 if (_buffer.Count > 0)
-                    FlushBufferAsync().GetAwaiter().GetResult();
+                    await FlushBufferAsync();
             }
             catch (Exception ex)
             {
@@ -39,15 +46,19 @@ public class PgMqProducer : IMqProducer
             }
         }
 
-        _pgmqClient?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        if (_pgmqClient is not null) await _pgmqClient.DisposeAsync();
     }
 
     public async Task InitializeAsync(MqConfig configuration)
     {
         _config = configuration.ToPgMqConfig();
         _communicationMode = configuration.CommunicationMode;
-        _pgmqClient = new PgmqClient(_config.ConnectionString);
-        await _pgmqClient.OpenAsync();
+
+        if (_pgmqClient is null)
+        {
+            _pgmqClient = new PgmqClient(_config.ConnectionString);
+            await _pgmqClient.OpenAsync();
+        }
 
         // For Streaming, ensure the queue exists (producer writes directly)
         if (_communicationMode == CommunicationMode.Streaming)
@@ -102,26 +113,11 @@ public class PgMqProducer : IMqProducer
 
     private async Task SendSingleAsync(Message message, string? routingTarget)
     {
-        switch (_communicationMode)
-        {
-            case CommunicationMode.PointToPoint:
-                // Route to specific group via topic routing key
-                var groupKey = PgMqNaming.GroupRoutingKey(routingTarget ?? throw new InvalidOperationException("PointToPoint requires a routing target."));
-                await _pgmqClient!.Topics.SendAsync(groupKey, message.Payload);
-                break;
-
-            case CommunicationMode.PubSub:
-                // Broadcast to all groups via broadcast routing key
-                var broadcastKey = PgMqNaming.BroadcastRoutingKey();
-                await _pgmqClient!.Topics.SendAsync(broadcastKey, message.Payload);
-                break;
-
-            case CommunicationMode.Streaming:
-                // Write directly to shared stream queue
-                var queueName = PgMqNaming.StreamQueue();
-                await _pgmqClient!.Send.SendAsync(queueName, message.Payload);
-                break;
-        }
+        var (target, isDirectQueue) = ResolveSendTarget(routingTarget);
+        if (isDirectQueue)
+            await _pgmqClient!.Send.SendAsync(target, message.Payload);
+        else
+            await _pgmqClient!.Topics.SendAsync(target, message.Payload);
     }
 
     private async Task FlushBufferAsync()
@@ -133,23 +129,27 @@ public class PgMqProducer : IMqProducer
         _timerRunning = false;
         _lingerTimer?.Change(Timeout.Infinite, Timeout.Infinite);
 
-        switch (_communicationMode)
+        var (target, isDirectQueue) = ResolveSendTarget(_lastRoutingTarget);
+        if (isDirectQueue)
+            await _pgmqClient!.Send.SendBatchAsync(target, payloads);
+        else
+            await _pgmqClient!.Topics.SendBatchAsync(target, payloads);
+    }
+
+    /// <summary>
+    /// Resolves the send target name and whether it's a direct queue (true) or topic routing key (false).
+    /// </summary>
+    private (string target, bool isDirectQueue) ResolveSendTarget(string? routingTarget)
+    {
+        return _communicationMode switch
         {
-            case CommunicationMode.PointToPoint:
-                var groupKey = PgMqNaming.GroupRoutingKey(_lastRoutingTarget!);
-                await _pgmqClient!.Topics.SendBatchAsync(groupKey, payloads);
-                break;
-
-            case CommunicationMode.PubSub:
-                var broadcastKey = PgMqNaming.BroadcastRoutingKey();
-                await _pgmqClient!.Topics.SendBatchAsync(broadcastKey, payloads);
-                break;
-
-            case CommunicationMode.Streaming:
-                var queueName = PgMqNaming.StreamQueue();
-                await _pgmqClient!.Send.SendBatchAsync(queueName, payloads);
-                break;
-        }
+            CommunicationMode.PointToPoint => (
+                PgMqNaming.GroupRoutingKey(routingTarget ?? throw new InvalidOperationException("PointToPoint requires a routing target.")),
+                false),
+            CommunicationMode.PubSub => (PgMqNaming.BroadcastRoutingKey(), false),
+            CommunicationMode.Streaming => (PgMqNaming.StreamQueue(), true),
+            _ => throw new InvalidOperationException($"Unsupported mode: {_communicationMode}")
+        };
     }
 
     private void OnLingerTimerFired(object? state)

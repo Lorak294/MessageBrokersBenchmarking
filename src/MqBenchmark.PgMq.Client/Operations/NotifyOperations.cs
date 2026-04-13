@@ -14,7 +14,7 @@ public class ErrorCodes
 /// and create PgmqNotifyListener instances for event-driven consumption.
 /// Management commands use ad-hoc (non-prepared) SQL.
 /// </summary>
-public sealed class NotifyOperations : PgmqOperationsBase
+public sealed class NotifyOperations : PgmqOperationsBase, INotifyOperations
 {
     private readonly string _connectionString;
 
@@ -51,7 +51,7 @@ public sealed class NotifyOperations : PgmqOperationsBase
     /// Creates a new PgmqNotifyListener with its own dedicated connection
     /// for LISTEN/WaitAsync. The caller is responsible for disposing the listener.
     /// </summary>
-    public PgmqNotifyListener CreateListener(string queueName)
+    public IPgmqNotifyListener CreateListener(string queueName)
     {
         return new PgmqNotifyListener(_connectionString, queueName);
     }

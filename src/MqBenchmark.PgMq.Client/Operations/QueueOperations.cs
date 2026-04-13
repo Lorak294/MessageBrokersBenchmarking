@@ -7,7 +7,7 @@ namespace MqBenchmark.PgMq.Client.Operations;
 /// Queue management operations: create, drop, purge, list.
 /// These are management commands, not hot-path — use ad-hoc (non-prepared) commands.
 /// </summary>
-public sealed class QueueOperations : PgmqOperationsBase
+public sealed class QueueOperations : PgmqOperationsBase, IQueueOperations
 {
     public QueueOperations(NpgsqlConnection connection) : base(connection) { }
 

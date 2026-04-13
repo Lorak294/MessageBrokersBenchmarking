@@ -17,7 +17,7 @@ public record JanitorConfig
 /// Responsible for preparing broker infrastructure before a test run.
 /// Creates/purges topics, queues, exchanges, and resets consumer state as needed.
 /// </summary>
-public interface IMqJanitor : IDisposable
+public interface IMqJanitor : IAsyncDisposable
 {
     Task PrepareInfrastructureAsync(JanitorConfig config);
 }

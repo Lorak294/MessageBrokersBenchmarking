@@ -32,6 +32,9 @@ public class WorkerRegistry
     private TaskCompletionSource? _allWorkersReadyTcs;
     private TaskCompletionSource? _allWorkersFinishedTcs;
     private TaskCompletionSource? _allProducersFinishedTcs;
+    private TaskCompletionSource? _allProducersDoneTcs;
+    private int _producersDoneCount;
+    private int _totalProducerCount;
     private TaskCompletionSource? _infrastructureReadyTcs;
     private readonly object _lock = new();
 
@@ -135,6 +138,9 @@ public class WorkerRegistry
             _allWorkersReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _allWorkersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _allProducersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _allProducersDoneTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _producersDoneCount = 0;
+            _totalProducerCount = 0;
             _infrastructureReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
@@ -208,6 +214,49 @@ public class WorkerRegistry
         {
             _infrastructureReadyTcs?.TrySetResult();
         }
+    }
+
+    /// <summary>
+    /// Called when a producer signals it has finished sending all messages (but may not have sent timestamps yet).
+    /// </summary>
+    public void MarkProducerDone()
+    {
+        lock (_lock)
+        {
+            _producersDoneCount++;
+            if (_totalProducerCount > 0 && _producersDoneCount >= _totalProducerCount)
+            {
+                _allProducersDoneTcs?.TrySetResult();
+            }
+        }
+    }
+
+    public void SetProducerCount(int count)
+    {
+        lock (_lock)
+        {
+            _totalProducerCount = count;
+        }
+    }
+
+    public Task WaitForAllProducersDoneAsync(TimeSpan timeout)
+    {
+        Task task;
+        lock (_lock)
+        {
+            if (_totalProducerCount > 0 && _producersDoneCount >= _totalProducerCount)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_allProducersDoneTcs == null || _allProducersDoneTcs.Task.IsCompleted)
+            {
+                _allProducersDoneTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+
+            task = _allProducersDoneTcs.Task;
+        }
+        return task.WaitAsync(timeout);
     }
 
     public Task WaitForInfrastructureReadyAsync(TimeSpan timeout)

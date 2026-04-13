@@ -7,6 +7,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="MqBenchmark.Implementations.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
       <ProjectReference Include="..\MqBenchmark.Core\MqBenchmark.Core.csproj" />
       <ProjectReference Include="..\MqBenchmark.PgMq.Client\MqBenchmark.PgMq.Client.csproj" />
     </ItemGroup>

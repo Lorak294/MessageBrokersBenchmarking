@@ -16,7 +16,7 @@ namespace MqBenchmark.PgMq.Client;
 /// A periodic fallback sweep is recommended to catch messages missed between
 /// throttled notifications.
 /// </summary>
-public sealed class PgmqNotifyListener : IAsyncDisposable
+public sealed class PgmqNotifyListener : IPgmqNotifyListener
 {
     private readonly string _connectionString;
     private readonly string _channelName;
@@ -76,7 +76,7 @@ public sealed class PgmqNotifyListener : IAsyncDisposable
 
     /// <summary>
     /// Waits for a notification or until the cancellation token is triggered.
-    /// Returns true if a notification was received, false if cancelled.
+    /// Returns true if a notification was received, false if canceled.
     /// </summary>
     public async Task<bool> WaitAsync(CancellationToken ct)
     {
@@ -101,13 +101,20 @@ public sealed class PgmqNotifyListener : IAsyncDisposable
         return _notified;
     }
 
-    private void OnNotification(object sender, NpgsqlNotificationEventArgs e)
+    internal void OnNotification(object sender, NpgsqlNotificationEventArgs e)
     {
-        if (string.Equals(e.Channel, _channelName, StringComparison.OrdinalIgnoreCase))
+        HandleNotification(e.Channel);
+    }
+
+    internal void HandleNotification(string channel)
+    {
+        if (string.Equals(channel, _channelName, StringComparison.OrdinalIgnoreCase))
         {
             _notified = true;
         }
     }
+    
+    internal bool IsNotified => _notified;
 
     public async ValueTask DisposeAsync()
     {

@@ -8,7 +8,7 @@ namespace MqBenchmark.PgMq.Client.Operations;
 /// Send operations: send single messages and batches, with optional delay.
 /// All commands are lazy-prepared on first use (hot path).
 /// </summary>
-public sealed class SendOperations : PgmqOperationsBase
+public sealed class SendOperations : PgmqOperationsBase, ISendOperations
 {
     private readonly CommandSlot _sendSlot = Slot();
     private readonly CommandSlot _sendDelaySlot = Slot();
@@ -105,7 +105,7 @@ public sealed class SendOperations : PgmqOperationsBase
         return await ReadIds(reader, ct);
     }
 
-    private static string[] EncodePayloads(IReadOnlyList<byte[]> payloads)
+    internal static string[] EncodePayloads(IReadOnlyList<byte[]> payloads)
     {
         var jsonArray = new string[payloads.Count];
         for (int i = 0; i < payloads.Count; i++)

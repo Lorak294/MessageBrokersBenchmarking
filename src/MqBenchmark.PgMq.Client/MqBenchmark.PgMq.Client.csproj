@@ -7,6 +7,11 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="MqBenchmark.Implementations.Tests" />
+        <InternalsVisibleTo Include="MqBenchmark.PgMq.Client.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="Npgsql" Version="10.0.2" />
     </ItemGroup>
 

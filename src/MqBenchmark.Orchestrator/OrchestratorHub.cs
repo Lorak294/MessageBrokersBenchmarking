@@ -67,7 +67,22 @@ public class OrchestratorHub(
         }
     }
 
-    // Called by workers to indicate they are finished
+    // Called by producers to indicate they have finished sending all messages
+    // (timestamps may still be in transit)
+    public void ProducerDone()
+    {
+        if (Context.Items.TryGetValue(OrchestratorConstants.IdKey, out var workerIdObj) && workerIdObj is Guid workerId)
+        {
+            logger.LogInformation(">>> Producer {Id} signals production complete", workerId);
+            workerRegistry.MarkProducerDone();
+        }
+        else
+        {
+            logger.LogWarning("ProducerDone called from connection {ConnectionId} without known WorkerId.", Context.ConnectionId);
+        }
+    }
+
+    // Called by workers to indicate they are finished (timestamps sent)
     public void WorkerFinished()
     {
         if (Context.Items.TryGetValue(OrchestratorConstants.IdKey, out var workerIdObj) && workerIdObj is Guid workerId)

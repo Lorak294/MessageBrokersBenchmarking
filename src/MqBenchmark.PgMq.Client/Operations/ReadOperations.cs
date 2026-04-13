@@ -8,7 +8,7 @@ namespace MqBenchmark.PgMq.Client.Operations;
 /// Read operations: read single/batch messages, and server-side long-polling via read_with_poll.
 /// All commands are lazy-prepared on first use (hot path).
 /// </summary>
-public sealed class ReadOperations : PgmqOperationsBase
+public sealed class ReadOperations : PgmqOperationsBase, IReadOperations
 {
     private readonly CommandSlot _readSlot = Slot();
     private readonly CommandSlot _readWithPollSlot = Slot();
@@ -76,7 +76,7 @@ public sealed class ReadOperations : PgmqOperationsBase
 
     /// <summary>
     /// Reads messages with msg_id greater than the given offset directly from the queue table.
-    /// Does NOT modify visibility timeout or delete/archive messages.
+    /// Does not modify visibility timeout or delete/archive messages.
     /// Used for streaming/replay scenarios where multiple consumer groups independently track offsets.
     /// Note: Cannot use prepared statements because the table name is dynamic.
     /// </summary>

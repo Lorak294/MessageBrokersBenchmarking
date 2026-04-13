@@ -9,7 +9,7 @@ services:
       resources:
         limits:
           cpus: "0.25"
-          memory: 256M
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
       interval: 2s
@@ -27,9 +27,10 @@ services:
       orchestrator:
         condition: service_healthy
     deploy:
-#      resources:
-#        limits:
-#          memory: 512M
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -43,8 +44,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 1G
+          cpus: "4.0"
+          memory: 3G
 
   kafka:
     image: apache/kafka-native:latest
@@ -64,8 +65,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 1G
+          cpus: "4.0"
+          memory: 3G
  
   pgmq:
     image: ghcr.io/pgmq/pg18-pgmq:v1.11.0
@@ -78,4 +79,4 @@ services:
       resources:
         limits:
           cpus: "4.0"
-          memory: 2G
+          memory: 3G
