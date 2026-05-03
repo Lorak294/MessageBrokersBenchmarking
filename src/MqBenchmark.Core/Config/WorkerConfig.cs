@@ -14,4 +14,7 @@ public class WorkerConfig
     public required int MessageCount { get; set; }
     public required int MessageSizeInBytes { get; set; }
     public int? SendFrequencyMps { get; set; }
+    public CommunicationMode CommunicationMode { get; set; } = CommunicationMode.PointToPoint;
+    public int ConsumerGroupIndex { get; set; }
+    public int ConsumerGroupCount { get; set; } = 1;
 }
