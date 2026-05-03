@@ -72,8 +72,10 @@ public class OrchestratorHub(
     {
         if (Context.Items.TryGetValue(OrchestratorConstants.IdKey, out var workerIdObj) && workerIdObj is Guid workerId)
         {
+            var workers = workerRegistry.GetAllWorkers();
+            var worker = workers.FirstOrDefault(w => w.WorkerId == workerId);
+            logger.LogInformation(">>> Worker {Id} finished (Role: {Role})", workerId, worker?.Role);
             workerRegistry.UpdateWorkerState(workerId, WorkerState.Finished);
-            logger.LogInformation("Worker {Id} is ready", workerId);
         }
         else
         {

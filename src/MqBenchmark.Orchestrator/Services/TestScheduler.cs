@@ -30,12 +30,11 @@ public class TestScheduler(
         // Reset timestamp aggregator for new test
         timestampAggregator.Reset();
         
-        // Assign workers to roles
+        // Reset worker state from any previous test run, then assign new roles
+        workerRegistry.ResetReadiness();
+        
         var allWorkers = workerRegistry.GetAllWorkers();
         await AssignWorkersAsync(allWorkers, request);
-        
-        // Reset and broadcast initialization to workers
-        workerRegistry.ResetReadiness();
         
         // Send config to producers
         await hubContext.Clients.Group(OrchestratorConstants.ProducerGroup).SendAsync(

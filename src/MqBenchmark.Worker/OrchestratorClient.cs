@@ -45,6 +45,7 @@ public class OrchestratorClient : BackgroundService
         
         _connection.On(OrchestratorMethods.ProducersDone, () =>
         {
+            _logger.LogInformation(">>> Received ProducersDone signal from orchestrator via SignalR");
             _worker.SignalProducersDone();
         });
         
@@ -60,7 +61,8 @@ public class OrchestratorClient : BackgroundService
                     
                     await _worker.StartTestAsync();
                     
-                    _logger.LogInformation("Test finished successfully.");
+                    _logger.LogInformation("Test finished successfully. Preparing to send timestamps (role: {Role}).", 
+                        _worker.GetTimestampData().Role);
                     
                     // Collect, compress, and send timestamp data in batches
                     var timestampData = _worker.GetTimestampData();
@@ -74,7 +76,7 @@ public class OrchestratorClient : BackgroundService
                         await _connection.InvokeAsync(OrchestratorMethods.SubmitTimestampBatch, batch);
                         _logger.LogDebug("Sent batch {BatchIndex}/{TotalBatches}", batch.BatchIndex + 1, batch.TotalBatches);
                     }
-                    
+                    _logger.LogInformation(">>> Calling WorkerFinished on orchestrator");
                     await _connection.InvokeAsync(OrchestratorMethods.WorkerFinished);
                 }
                 catch (Exception ex)

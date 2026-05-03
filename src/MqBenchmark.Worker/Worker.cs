@@ -203,12 +203,17 @@ public class Worker(
             
             if (!sw.IsRunning) sw.Start();
             
-            Interlocked.Increment(ref receivedCount);
+            var count = Interlocked.Increment(ref receivedCount);
             Interlocked.Exchange(ref lastMessageAtTicks, Stopwatch.GetTimestamp());
+            
+            if (count % 100 == 0)
+                logger.LogDebug("Consumer received {Count} messages so far", count);
             
             return Task.CompletedTask;
         });
 
+        logger.LogInformation(">>> Consumer subscribed. Waiting for ProducersDone signal...");
+        
         // Wait for ProducersDone signal first (with hard safety timeout)
         var hardTimeout = TimeSpan.FromMinutes(20);
         var hardTimeoutTask = Task.Delay(hardTimeout);
@@ -226,8 +231,8 @@ public class Worker(
         }
         
         // Producers are done — now wait for idle timeout (no messages for N seconds)
-        logger.LogInformation("Producers done. Waiting for idle timeout ({Timeout}s) to drain remaining messages...", 
-            _config.ConsumerIdleTimeoutSeconds);
+        logger.LogInformation(">>> ProducersDone signal received. Received {Count} messages so far. Entering idle drain (timeout={Timeout}s)...", 
+            receivedCount, _config.ConsumerIdleTimeoutSeconds);
         
         // Set initial "last message" to now if we haven't received anything yet
         Interlocked.CompareExchange(ref lastMessageAtTicks, Stopwatch.GetTimestamp(), 0);
@@ -241,6 +246,8 @@ public class Worker(
             
             if (elapsed >= idleTimeout)
             {
+                logger.LogInformation(">>> Idle timeout reached ({Elapsed}ms since last message). Received {Count} total messages.", 
+                    elapsed.TotalMilliseconds, receivedCount);
                 break;
             }
             
