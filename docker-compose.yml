@@ -5,6 +5,17 @@ services:
       dockerfile: src/MqBenchmark.Orchestrator/Dockerfile
     ports:
       - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   worker:
     build:
@@ -13,7 +24,13 @@ services:
     environment:
       - OrchestratorUrl=http://orchestrator:8080/orchestrator
     depends_on:
-      - orchestrator
+      orchestrator:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -21,6 +38,11 @@ services:
       - "5672:5672"
       - "15672:15672"
     profiles: [rabbitmq]
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
 
   kafka:
     image: apache/kafka-native:latest
@@ -37,6 +59,11 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       CLUSTER_ID: MqBenchmarkKafkaClusterId01
     profiles: [kafka]
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
  
   pgmq:
     image: ghcr.io/pgmq/pg18-pgmq:v1.11.0
@@ -45,3 +72,8 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
     profiles: [pgmq]
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
