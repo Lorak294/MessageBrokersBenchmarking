@@ -3,6 +3,7 @@
   "producersCount": 1,
   "messageCount": 1000,
   "messageSizeInBytes": 255,
+  "sendFrequencyMps": 200,
   "mqConfig": {
     "implementation": "RabbitMQ",
     "additionalSettings": {

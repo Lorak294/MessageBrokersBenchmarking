@@ -123,10 +123,17 @@ public class Worker(
         
         if(_producer == null)
             throw new InvalidOperationException("Producer is not initialized!");
-        
+
+        RateLimiter? rateLimiter = _config.SendFrequencyMps is > 0
+            ? new RateLimiter(_config.SendFrequencyMps.Value)
+            : null;
+
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < _config.MessageCount; i++)
         {
+            if (rateLimiter != null)
+                await rateLimiter.WaitAsync();
+
             var message = Message.CreateMessage(_config.MessageSizeInBytes);
             
             // Record timestamp right before sending — this is the correct measurement
