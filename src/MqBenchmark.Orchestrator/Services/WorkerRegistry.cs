@@ -9,11 +9,20 @@ public enum WorkerState
     Disconnected
 }
 
+public enum WorkerRole
+{
+    Unassigned,
+    Producer,
+    Consumer
+}
+
 public class WorkerInfo
 {
     public Guid WorkerId { get; set; }
     public string ConnectionId { get; set; } = string.Empty;
     public WorkerState State { get; set; }
+    public WorkerRole Role { get; set; }
+    public int? ConsumerGroupIndex { get; set; }
     public DateTime LastHeartbeat { get; set; }
 }
 
@@ -22,6 +31,7 @@ public class WorkerRegistry
     private readonly Dictionary<Guid, WorkerInfo> _workers = new();
     private TaskCompletionSource? _allWorkersReadyTcs;
     private TaskCompletionSource? _allWorkersFinishedTcs;
+    private TaskCompletionSource? _allProducersFinishedTcs;
     private readonly object _lock = new();
 
     public int ConnectedWorkerCount
@@ -38,6 +48,7 @@ public class WorkerRegistry
                 WorkerId = workerId,
                 ConnectionId = connectionId,
                 State = WorkerState.Connected,
+                Role = WorkerRole.Unassigned,
                 LastHeartbeat = DateTime.UtcNow
             };
         }
@@ -49,9 +60,21 @@ public class WorkerRegistry
         {
             if (_workers.Remove(workerId))
             {
-                // TODO: Consider setting state to disconnected instead of removing
                 CheckReadiness();
+                CheckProducersFinish();
                 CheckFinish();
+            }
+        }
+    }
+    
+    public void SetWorkerRole(Guid workerId, WorkerRole role, int? consumerGroupIndex = null)
+    {
+        lock (_lock)
+        {
+            if (_workers.TryGetValue(workerId, out var workerInfo))
+            {
+                workerInfo.Role = role;
+                workerInfo.ConsumerGroupIndex = consumerGroupIndex;
             }
         }
     }
@@ -72,6 +95,7 @@ public class WorkerRegistry
 
                 if (newState == WorkerState.Finished)
                 {
+                    CheckProducersFinish();
                     CheckFinish();
                 }
             }
@@ -104,9 +128,12 @@ public class WorkerRegistry
             foreach (var worker in _workers.Values)
             {
                 worker.State = WorkerState.Connected;
+                worker.Role = WorkerRole.Unassigned;
+                worker.ConsumerGroupIndex = null;
             }
             _allWorkersReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _allWorkersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _allProducersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
     
@@ -135,7 +162,9 @@ public class WorkerRegistry
         Task task;
         lock (_lock)
         {
-            if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Finished))
+            if (_workers.Count > 0 && _workers.Values
+                    .Where(w => w.Role != WorkerRole.Unassigned)
+                    .All(w => w.State == WorkerState.Finished))
             {
                 return Task.CompletedTask;
             }
@@ -150,12 +179,31 @@ public class WorkerRegistry
         return task.WaitAsync(timeout);
     }
     
+    public Task WaitForAllProducersFinishedAsync(TimeSpan timeout)
+    {
+        Task task;
+        lock (_lock)
+        {
+            var producers = _workers.Values.Where(w => w.Role == WorkerRole.Producer).ToList();
+            if (producers.Count > 0 && producers.All(w => w.State == WorkerState.Finished))
+            {
+                return Task.CompletedTask;
+            }
+            
+            if (_allProducersFinishedTcs == null || _allProducersFinishedTcs.Task.IsCompleted)
+            {
+                _allProducersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            
+            task = _allProducersFinishedTcs.Task;
+        }
+        return task.WaitAsync(timeout);
+    }
 
     public List<WorkerInfo> GetAllWorkers()
     {
         lock (_lock)
         {
-            // Return a copy to avoid enumeration issues outside the lock
             return _workers.Values.ToList();
         }
     }
@@ -168,10 +216,20 @@ public class WorkerRegistry
             _allWorkersReadyTcs?.TrySetResult();
         }
     }
+    
+    private void CheckProducersFinish()
+    {
+        var producers = _workers.Values.Where(w => w.Role == WorkerRole.Producer).ToList();
+        if (producers.Count > 0 && producers.All(w => w.State == WorkerState.Finished))
+        {
+            _allProducersFinishedTcs?.TrySetResult();
+        }
+    }
+    
     private void CheckFinish()
     {
-        // Internal helper: assumes lock is already held
-        if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Finished))
+        var assigned = _workers.Values.Where(w => w.Role != WorkerRole.Unassigned).ToList();
+        if (assigned.Count > 0 && assigned.All(w => w.State == WorkerState.Finished))
         {
             _allWorkersFinishedTcs?.TrySetResult();
         }
