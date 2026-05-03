@@ -1,9 +1,11 @@
 {
-  "consumersCount": 1,
   "producersCount": 1,
+  "consumerGroups": [1],
+  "communicationMode": "PointToPoint",
   "messageCount": 1000,
   "messageSizeInBytes": 255,
   "sendFrequencyMps": 200,
+  "consumerIdleTimeoutSeconds": 15,
   "mqConfig": {
     "implementation": "RabbitMQ",
     "additionalSettings": {
@@ -11,7 +13,8 @@
       "Port": "5672",
       "Username": "guest",
       "Password": "guest",
-      "QueueName": "myqueue"
+      "QueueName": "myqueue",
+      "ExchangeName": "benchmark-exchange"
     }
   }
 }

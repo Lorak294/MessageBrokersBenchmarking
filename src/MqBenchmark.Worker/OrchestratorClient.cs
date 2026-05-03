@@ -43,6 +43,11 @@ public class OrchestratorClient : BackgroundService
             }
         });
         
+        _connection.On(OrchestratorMethods.ProducersDone, () =>
+        {
+            _worker.SignalProducersDone();
+        });
+        
         // Run the test on a background thread so the SignalR connection can
         // continue processing keep-alive pings during long-running tests.
         _connection.On(OrchestratorMethods.StartTest, () =>

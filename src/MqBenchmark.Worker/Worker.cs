@@ -18,6 +18,20 @@ public class Worker(
     private WorkerConfig? _config;
     
     private ConcurrentDictionary<Guid, long> _messageTimestamps = new();
+    
+    /// <summary>
+    /// Signaled by the orchestrator when all producers have finished sending messages.
+    /// </summary>
+    private readonly TaskCompletionSource _producersDoneTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    
+    /// <summary>
+    /// Called by OrchestratorClient when the ProducersDone signal is received.
+    /// </summary>
+    public void SignalProducersDone()
+    {
+        logger.LogInformation("Received ProducersDone signal from orchestrator.");
+        _producersDoneTcs.TrySetResult();
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -168,6 +182,7 @@ public class Worker(
         int receivedCount = 0;
         var sw = new Stopwatch();
         var completionSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        long lastMessageAtTicks = 0;
 
         if (_consumer == null)
         {
@@ -178,6 +193,8 @@ public class Worker(
             throw new InvalidOperationException("Worker configuration is not initialized.");
         }
         
+        var idleTimeout = TimeSpan.FromSeconds(_config.ConsumerIdleTimeoutSeconds);
+        
         await _consumer.SubscribeAsync((message) =>
         {
             // Record timestamp immediately upon receiving
@@ -186,32 +203,60 @@ public class Worker(
             
             if (!sw.IsRunning) sw.Start();
             
-            var current = Interlocked.Increment(ref receivedCount);
-
-            if (current >= _config.MessageCount)
-            {
-                sw.Stop();
-                logger.LogInformation("Consumer Finished. Received {Count} msgs in {S}s", 
-                    current, sw.Elapsed.TotalSeconds);
-                completionSource.TrySetResult();
-            }
+            Interlocked.Increment(ref receivedCount);
+            Interlocked.Exchange(ref lastMessageAtTicks, Stopwatch.GetTimestamp());
             
             return Task.CompletedTask;
         });
 
-        // Wait for all messages to be received, with a timeout to avoid hanging forever
-        var timeout = TimeSpan.FromMinutes(20);
-        var completedTask = await Task.WhenAny(completionSource.Task, Task.Delay(timeout));
-        if (completedTask != completionSource.Task)
+        // Wait for ProducersDone signal first (with hard safety timeout)
+        var hardTimeout = TimeSpan.FromMinutes(20);
+        var hardTimeoutTask = Task.Delay(hardTimeout);
+        
+        var producersDoneOrTimeout = await Task.WhenAny(_producersDoneTcs.Task, hardTimeoutTask);
+        if (producersDoneOrTimeout == hardTimeoutTask)
         {
             sw.Stop();
             logger.LogWarning(
-                "Consumer timed out after {Timeout}. Received {Count}/{Expected} messages in {S}s",
-                timeout, receivedCount, _config.MessageCount, sw.Elapsed.TotalSeconds);
+                "Consumer timed out waiting for ProducersDone after {Timeout}. Received {Count} messages in {S}s",
+                hardTimeout, receivedCount, sw.Elapsed.TotalSeconds);
+            _consumer?.Dispose();
+            _consumer = null;
+            return;
         }
         
+        // Producers are done — now wait for idle timeout (no messages for N seconds)
+        logger.LogInformation("Producers done. Waiting for idle timeout ({Timeout}s) to drain remaining messages...", 
+            _config.ConsumerIdleTimeoutSeconds);
+        
+        // Set initial "last message" to now if we haven't received anything yet
+        Interlocked.CompareExchange(ref lastMessageAtTicks, Stopwatch.GetTimestamp(), 0);
+        
+        while (true)
+        {
+            await Task.Delay(500); // Check every 500ms
+            
+            var lastTicks = Interlocked.Read(ref lastMessageAtTicks);
+            var elapsed = Stopwatch.GetElapsedTime(lastTicks);
+            
+            if (elapsed >= idleTimeout)
+            {
+                break;
+            }
+            
+            // Safety: also break on hard timeout
+            if (hardTimeoutTask.IsCompleted)
+            {
+                logger.LogWarning("Hard timeout reached during idle drain.");
+                break;
+            }
+        }
+        
+        sw.Stop();
+        logger.LogInformation("Consumer Finished. Received {Count} msgs in {S}s", 
+            receivedCount, sw.Elapsed.TotalSeconds);
+        
         // Stop the consumer's background loop so it doesn't keep reading after the test ends.
-        // Timestamps are stored on the Worker, so disposing the consumer here is safe.
         _consumer?.Dispose();
         _consumer = null;
     }
