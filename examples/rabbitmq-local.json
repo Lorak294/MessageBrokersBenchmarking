@@ -10,7 +10,7 @@
       "Port": "5672",
       "Username": "guest",
       "Password": "guest",
-      "VirtualHost": "myqueue"
+      "QueueName": "myqueue"
     }
   }
 }

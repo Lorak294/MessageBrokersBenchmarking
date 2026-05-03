@@ -12,7 +12,8 @@ public static class MqConfigRabbitMqExtensions
             Port = int.Parse(configuration.GetRequiredSetting("Port")),
             Username = configuration.GetRequiredSetting("Username"),
             Password = configuration.GetRequiredSetting("Password"),
-            QueueName = configuration.GetRequiredSetting("VirtualHost"),
+            QueueName = configuration.GetRequiredSetting("QueueName"),
+            ExchangeName = configuration.GetOptionalSetting("ExchangeName", ""),
             DurableMode = bool.Parse(configuration.GetOptionalSetting("DurableMode", "false")),
             QueueAutoDelete = bool.Parse(configuration.GetOptionalSetting("QueueAutodelete", "false")),
             PrefetchCount = ushort.Parse(configuration.GetOptionalSetting("PrefetchCount", "100")),
@@ -28,6 +29,11 @@ public record RabbitMqConfig
     public required string Username { get; init; }
     public required string Password { get; init; }
     public required string QueueName { get; init; }
+    /// <summary>
+    /// Exchange name used for PubSub mode (fanout exchange).
+    /// Empty string means default exchange (PointToPoint).
+    /// </summary>
+    public string ExchangeName { get; init; } = "";
     public required bool DurableMode { get; init; } = false;
     public required bool QueueAutoDelete { get; init; } = false;
     /// <summary>
