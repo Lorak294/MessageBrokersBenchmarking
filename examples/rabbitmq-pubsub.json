@@ -1,0 +1,20 @@
+{
+  "producersCount": 2,
+  "consumerGroups": [2, 2],
+  "communicationMode": "PubSub",
+  "messageCount": 1000,
+  "messageSizeInBytes": 255,
+  "sendFrequencyMps": 200,
+  "consumerIdleTimeoutSeconds": 15,
+  "mqConfig": {
+    "implementation": "RabbitMQ",
+    "additionalSettings": {
+      "Hostname": "rabbitmq",
+      "Port": "5672",
+      "Username": "guest",
+      "Password": "guest",
+      "QueueName": "myqueue",
+      "ExchangeName": "benchmark-fanout"
+    }
+  }
+}

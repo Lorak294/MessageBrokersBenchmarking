@@ -1,0 +1,26 @@
+{
+  "producersCount": 2,
+  "consumerGroups": [2, 2],
+  "communicationMode": "PubSub",
+  "messageCount": 1000,
+  "messageSizeInBytes": 255,
+  "sendFrequencyMps": 200,
+  "consumerIdleTimeoutSeconds": 15,
+  "mqConfig": {
+    "implementation": "PgMq",
+    "additionalSettings": {
+      "ConnectionString": "Host=pgmq;Port=5432;Username=postgres;Password=postgres;Database=postgres",
+      "QueueName": "benchmark_queue",
+      "RoutingKey": "benchmark.*",
+      "VisibilityTimeout": "30",
+      "QueueMode": "NonPartitioned",
+      "MessageReadMode": "Delete",
+      "ConsumerMode": "ClientPoll",
+      "PollIntervalMs": "100",
+      "MaxPollSeconds": "5",
+      "NotifyThrottleMs": "250",
+      "DelaySeconds": "0",
+      "UsePop": "true"
+    }
+  }
+}
