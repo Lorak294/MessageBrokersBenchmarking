@@ -39,10 +39,19 @@ public class KafkaConsumer : IMqConsumer
     {
         _kafkaConfig = configuration.ToKafkaConfig();
 
+        // For PubSub/Streaming, each consumer group gets a unique GroupId
+        // so each group independently receives all messages.
+        // For PointToPoint, all consumers share the same GroupId (competing consumers).
+        var groupId = _kafkaConfig.GroupId;
+        if (configuration.CommunicationMode is CommunicationMode.PubSub or CommunicationMode.Streaming)
+        {
+            groupId = $"{groupId}_group_{configuration.ConsumerGroupIndex}";
+        }
+
         var consumerConfig = new ConsumerConfig
         {
             BootstrapServers = _kafkaConfig.BootstrapServers,
-            GroupId = _kafkaConfig.GroupId,
+            GroupId = groupId,
             AutoOffsetReset = _kafkaConfig.AutoOffsetReset,
             EnableAutoCommit = _kafkaConfig.EnableAutoCommit
         };

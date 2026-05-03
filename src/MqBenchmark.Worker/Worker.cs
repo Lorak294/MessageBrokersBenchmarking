@@ -229,7 +229,8 @@ public class Worker(
         {
             WorkerId = Id,
             Role = role,
-            Timestamps = timestamps
+            Timestamps = timestamps,
+            ConsumerGroupIndex = _config?.MqConfig.ConsumerGroupIndex ?? 0
         };
     }
 }

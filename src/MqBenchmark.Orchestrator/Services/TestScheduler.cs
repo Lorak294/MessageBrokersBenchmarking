@@ -44,9 +44,11 @@ public class TestScheduler(
                 WorkerRole = WorkerConfig.Roles.Producer,
                 MessageCount = request.MessageCount,
                 MessageSizeInBytes = request.MessageSizeInBytes,
-                MqConfig = request.MqConfig,
+                MqConfig = request.MqConfig with
+                {
+                    CommunicationMode = request.CommunicationMode,
+                },
                 SendFrequencyMps = request.SendFrequencyMps,
-                CommunicationMode = request.CommunicationMode,
             });
         
         // Send config to each consumer individually with their group index
@@ -63,10 +65,11 @@ public class TestScheduler(
                         WorkerRole = WorkerConfig.Roles.Consumer,
                         MessageCount = request.MessageCount,
                         MessageSizeInBytes = request.MessageSizeInBytes,
-                        MqConfig = request.MqConfig,
-                        CommunicationMode = request.CommunicationMode,
-                        ConsumerGroupIndex = groupIndex,
-                        ConsumerGroupCount = request.ConsumerGroups.Length,
+                        MqConfig = request.MqConfig with
+                        {
+                            CommunicationMode = request.CommunicationMode,
+                            ConsumerGroupIndex = groupIndex,
+                        },
                         ConsumerIdleTimeoutSeconds = request.ConsumerIdleTimeoutSeconds,
                     });
                 consumerIndex++;
