@@ -128,6 +128,10 @@ public class Worker(
             ? new RateLimiter(_config.SendFrequencyMps.Value)
             : null;
 
+        long totalSendTicks = 0;
+        long minSendTicks = long.MaxValue;
+        long maxSendTicks = 0;
+
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < _config.MessageCount; i++)
         {
@@ -135,16 +139,28 @@ public class Worker(
                 await rateLimiter.WaitAsync();
 
             var message = Message.CreateMessage(_config.MessageSizeInBytes);
-            
-            // Record timestamp right before sending — this is the correct measurement
-            // point for end-to-end latency (intent to send → consumer receives).
             _messageTimestamps[message.Id] = DateTime.UtcNow.Ticks;
+
+            var sendStart = Stopwatch.GetTimestamp();
             await _producer.SendAsync(message);
+            var sendElapsed = Stopwatch.GetTimestamp() - sendStart;
+
+            totalSendTicks += sendElapsed;
+            if (sendElapsed < minSendTicks) minSendTicks = sendElapsed;
+            if (sendElapsed > maxSendTicks) maxSendTicks = sendElapsed;
         }
         sw.Stop();
 
-        logger.LogInformation("Producer Finished. Sent {Count} msgs in {S}s", 
-            _config.MessageCount, sw.Elapsed.TotalSeconds);
+        var avgSendMs = (double)totalSendTicks / _config.MessageCount / Stopwatch.Frequency * 1000;
+        var minSendMs = (double)minSendTicks / Stopwatch.Frequency * 1000;
+        var maxSendMs = (double)maxSendTicks / Stopwatch.Frequency * 1000;
+        var avgIntervalMs = sw.Elapsed.TotalMilliseconds / _config.MessageCount;
+
+        logger.LogInformation(
+            "Producer Finished. Sent {Count} msgs in {S:F3}s | " +
+            "AvgInterval={AvgInterval:F3}ms, AvgSend={AvgSend:F3}ms, MinSend={MinSend:F3}ms, MaxSend={MaxSend:F3}ms",
+            _config.MessageCount, sw.Elapsed.TotalSeconds,
+            avgIntervalMs, avgSendMs, minSendMs, maxSendMs);
     }
 
     private async Task ExecuteConsumerTest()

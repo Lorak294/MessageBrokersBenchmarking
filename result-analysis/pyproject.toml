@@ -1,0 +1,10 @@
+[project]
+name = "result-analysis"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas",
+    "matplotlib",
+    "numpy",
+    "scipy",
+]
