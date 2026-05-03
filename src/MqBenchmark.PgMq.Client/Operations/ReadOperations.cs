@@ -73,4 +73,22 @@ public sealed class ReadOperations : PgmqOperationsBase
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await ReadMessages(reader, ct);
     }
+
+    /// <summary>
+    /// Reads messages with msg_id greater than the given offset directly from the queue table.
+    /// Does NOT modify visibility timeout or delete/archive messages.
+    /// Used for streaming/replay scenarios where multiple consumer groups independently track offsets.
+    /// Note: Cannot use prepared statements because the table name is dynamic.
+    /// </summary>
+    public async Task<IReadOnlyList<PgmqMessage>> ReadFromOffsetAsync(
+        string queueName, long afterMsgId, int qty = 1, CancellationToken ct = default)
+    {
+        var sql = $"SELECT msg_id, read_ct, enqueued_at, last_read_at, vt, message FROM pgmq.q_{queueName} WHERE msg_id > $1 ORDER BY msg_id LIMIT $2";
+        await using var cmd = new NpgsqlCommand(sql, Connection);
+        cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Bigint, Value = afterMsgId });
+        cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = qty });
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        return await ReadMessages(reader, ct);
+    }
 }

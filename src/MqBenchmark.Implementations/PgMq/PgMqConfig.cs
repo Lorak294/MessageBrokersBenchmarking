@@ -19,7 +19,8 @@ public static class MqConfigPgMqExtensions
             MaxPollSeconds = int.Parse(configuration.GetOptionalSetting("MaxPollSeconds", "5")),
             NotifyThrottleMs = int.Parse(configuration.GetOptionalSetting("NotifyThrottleMs", "250")),
             DelaySeconds = int.Parse(configuration.GetOptionalSetting("DelaySeconds", "0")),
-            UsePop = bool.Parse(configuration.GetOptionalSetting("UsePop", "true"))
+            UsePop = bool.Parse(configuration.GetOptionalSetting("UsePop", "true")),
+            RoutingKey = configuration.GetOptionalSetting("RoutingKey", "")
         };
     }
 }
@@ -70,6 +71,12 @@ public record PgMqConfig
     /// Default: true.
     /// </summary>
     public bool UsePop { get; init; } = true;
+
+    /// <summary>
+    /// Routing key for PubSub mode using PGMQ topics.
+    /// Messages sent with this key will be delivered to all queues bound with a matching pattern.
+    /// </summary>
+    public string RoutingKey { get; init; } = "";
 
     public enum QueueModeEnum
     {
