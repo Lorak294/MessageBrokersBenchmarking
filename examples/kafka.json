@@ -15,7 +15,8 @@
       "Acks": "Leader",
       "LingerMs": "5",
       "BatchSize": "65536",
-      "UseBufferedProducer": "true"
+      "UseBufferedProducer": "true",
+      "NumPartitions": "1"
     }
   }
 }

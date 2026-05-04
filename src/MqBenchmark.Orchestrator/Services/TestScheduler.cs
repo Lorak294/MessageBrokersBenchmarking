@@ -76,7 +76,8 @@ public class TestScheduler(
         }
         
         // throws TimeoutException on timeout
-        await workerRegistry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(30));
+        await workerRegistry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(30)); // TODO: make timeout configurable
+        logger.LogInformation("All workers acknowledged initialization.");
     }
     
     public async Task<BenchmarkResults> StartTestAsync()

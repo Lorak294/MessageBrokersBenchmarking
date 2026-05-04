@@ -103,7 +103,7 @@ public class RabbitMqConsumer : IMqConsumer
             case CommunicationMode.Streaming:
                 // Stream queues: all consumers read from the same stream queue with offsets
                 _consumeQueueName = rabbitConfig.QueueName;
-                _autoAck = true; // Streams require auto-ack
+                _autoAck = false; // Streams require manual ack (auto-ack not supported by stream queues)
                 
                 // Declare stream queue (idempotent)
                 var streamArgs = new Dictionary<string, object?>

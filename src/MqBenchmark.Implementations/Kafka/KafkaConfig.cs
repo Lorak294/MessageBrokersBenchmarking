@@ -18,7 +18,8 @@ public static class MqConfigKafkaExtensions
             EnableIdempotence = bool.Parse(configuration.GetOptionalSetting("EnableIdempotence", "false")),
             AutoOffsetReset = Enum.Parse<AutoOffsetReset>(configuration.GetOptionalSetting("AutoOffsetReset", "Earliest"), ignoreCase: true),
             EnableAutoCommit = bool.Parse(configuration.GetOptionalSetting("EnableAutoCommit", "true")),
-            UseBufferedProducer = bool.Parse(configuration.GetOptionalSetting("UseBufferedProducer", "true"))
+            UseBufferedProducer = bool.Parse(configuration.GetOptionalSetting("UseBufferedProducer", "true")),
+            NumPartitions = int.Parse(configuration.GetOptionalSetting("NumPartitions", "1"))
         };
     }
 }
@@ -76,4 +77,11 @@ public class KafkaConfig
     /// Default: true.
     /// </summary>
     public bool UseBufferedProducer { get; init; } = true;
+    
+    /// <summary>
+    /// Number of partitions to create for the topic.
+    /// For PointToPoint mode, set this >= max consumers in any group to ensure all consumers are active.
+    /// Default: 1.
+    /// </summary>
+    public int NumPartitions { get; init; } = 1;
 }

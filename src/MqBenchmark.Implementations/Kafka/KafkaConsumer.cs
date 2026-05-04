@@ -57,6 +57,18 @@ public class KafkaConsumer : IMqConsumer
         };
 
         _consumer = new ConsumerBuilder<Null, byte[]>(consumerConfig).Build();
+        
+        // Subscribe and wait for partition assignment (handles race with producer creating the topic)
+        _consumer.Subscribe(_kafkaConfig.TopicName);
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            try { _consumer.Consume(TimeSpan.FromMilliseconds(500)); }
+            catch (ConsumeException) { /* Topic may not exist yet */ }
+            
+            if (_consumer.Assignment.Count > 0) break;
+        }
+        
         return Task.CompletedTask;
     }
 
@@ -67,7 +79,7 @@ public class KafkaConsumer : IMqConsumer
             throw new InvalidOperationException("Consumer is not initialized. Call InitializeAsync first.");
         }
 
-        _consumer.Subscribe(_kafkaConfig.TopicName);
+        // Consumer is already subscribed and has partition assignments from InitializeAsync.
         _consumptionCts = new CancellationTokenSource();
 
         _consumptionTask = Task.Run(async () =>
