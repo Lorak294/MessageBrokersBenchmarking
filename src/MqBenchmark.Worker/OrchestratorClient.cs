@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using MqBenchmark.Core.Constants;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.Metrics;
+using MqBenchmark.Core.MqImplementation;
 
 namespace MqBenchmark.Worker;
 
@@ -30,6 +31,19 @@ public class OrchestratorClient : BackgroundService
         _connection.KeepAliveInterval = TimeSpan.FromSeconds(15);
 
         // Register handlers for orchestrator methods
+        _connection.On<JanitorConfig>(OrchestratorMethods.PrepareInfrastructure, async (janitorConfig) =>
+        {
+            try
+            {
+                await _worker.PrepareInfrastructureAsync(janitorConfig);
+                await _connection.InvokeAsync(OrchestratorMethods.InfrastructureReady);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while preparing infrastructure (janitor).");
+            }
+        });
+
         _connection.On<WorkerConfig>(OrchestratorMethods.InitializeTest, async (testConfig) =>
         {
             try

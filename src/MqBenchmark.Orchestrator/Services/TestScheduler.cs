@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using MqBenchmark.Core.Constants;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.Metrics;
+using MqBenchmark.Core.MqImplementation;
 using MqBenchmark.Orchestrator.Contracts;
 
 namespace MqBenchmark.Orchestrator.Services;
@@ -33,7 +34,24 @@ public class TestScheduler(
         // Reset worker state from any previous test run, then assign new roles
         workerRegistry.ResetReadiness();
         
+        // Janitor step: pick first worker, send PrepareInfrastructure, wait for InfrastructureReady
         var allWorkers = workerRegistry.GetAllWorkers();
+        var janitorWorker = allWorkers.First();
+        
+        var janitorConfig = new JanitorConfig
+        {
+            MqConfig = request.MqConfig,
+            CommunicationMode = request.CommunicationMode,
+            ConsumerGroups = request.ConsumerGroups
+        };
+        
+        logger.LogInformation("Sending PrepareInfrastructure to janitor worker {WorkerId}", janitorWorker.WorkerId);
+        await hubContext.Clients.Client(janitorWorker.ConnectionId).SendAsync(
+            OrchestratorMethods.PrepareInfrastructure, janitorConfig);
+        
+        await workerRegistry.WaitForInfrastructureReadyAsync(TimeSpan.FromSeconds(30));
+        logger.LogInformation("Infrastructure ready. Proceeding with worker assignment.");
+        
         await AssignWorkersAsync(allWorkers, request);
         
         // Send config to producers

@@ -10,9 +10,11 @@ public static class MqConfigPgMqExtensions
         {
             QueueName = configuration.GetRequiredSetting("QueueName"),
             ConnectionString = configuration.GetRequiredSetting("ConnectionString"),
-            VisibilityTimeout = int.Parse(configuration.GetRequiredSetting("VisibilityTimeout")),
-            QueueMode = Enum.Parse<PgMqConfig.QueueModeEnum>(configuration.GetRequiredSetting("QueueMode")),
-            MessageReadMode = Enum.Parse<PgMqConfig.ReadModeEnum>(configuration.GetRequiredSetting("MessageReadMode")),
+            VisibilityTimeout = int.Parse(configuration.GetOptionalSetting("VisibilityTimeout", "30")),
+            QueueMode = Enum.Parse<PgMqConfig.QueueModeEnum>(
+                configuration.GetOptionalSetting("QueueMode", "NonPartitioned")),
+            MessageReadMode = Enum.Parse<PgMqConfig.ReadModeEnum>(
+                configuration.GetOptionalSetting("MessageReadMode", "Delete")),
             ConsumerMode = Enum.Parse<PgMqConfig.ConsumerModeEnum>(
                 configuration.GetOptionalSetting("ConsumerMode", "ClientPoll")),
             PollIntervalMs = int.Parse(configuration.GetOptionalSetting("PollIntervalMs", "100")),

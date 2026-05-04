@@ -11,6 +11,8 @@ public static class OrchestratorMethods
     public const string WorkerFinished = "WorkerFinished";
     public const string SubmitTimestampBatch = "SubmitTimestampBatch";
     public const string ProducersDone = "ProducersDone";
+    public const string PrepareInfrastructure = "PrepareInfrastructure";
+    public const string InfrastructureReady = "InfrastructureReady";
 }
 
 /// <summary>

@@ -74,6 +74,18 @@ public class Worker(
         logger.LogInformation("Benchmark test initialized...");
     }
 
+    public async Task PrepareInfrastructureAsync(JanitorConfig config)
+    {
+        logger.LogInformation("Janitor: Preparing infrastructure for {Implementation} ({Mode})",
+            config.MqConfig.Implementation, config.CommunicationMode);
+        
+        var implementation = serviceProvider.GetRequiredKeyedService<IMqImplementation>(config.MqConfig.Implementation);
+        using var janitor = implementation.CreateJanitor();
+        await janitor.PrepareInfrastructureAsync(config);
+        
+        logger.LogInformation("Janitor: Infrastructure preparation complete.");
+    }
+
     /// <summary>
     /// Disposes previous producer/consumer, clears timestamps, and resets all state
     /// so the worker can be reused for another test run.

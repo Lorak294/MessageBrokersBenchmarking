@@ -1,5 +1,4 @@
 using Confluent.Kafka;
-using Confluent.Kafka.Admin;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.MqImplementation;
 
@@ -16,31 +15,9 @@ public class KafkaProducer : IMqProducer
         _producer?.Dispose();
     }
 
-    public async Task InitializeAsync(MqConfig configuration)
+    public Task InitializeAsync(MqConfig configuration)
     {
         _kafkaConfig = configuration.ToKafkaConfig();
-        
-        // Delete and recreate topic to ensure a clean slate for each test run
-        using var adminClient = new AdminClientBuilder(
-            new AdminClientConfig { BootstrapServers = _kafkaConfig.BootstrapServers })
-            .Build();
-
-        try
-        {
-            await adminClient.DeleteTopicsAsync(new[] { _kafkaConfig.TopicName });
-            await Task.Delay(2000); // Wait for deletion to propagate
-        }
-        catch (DeleteTopicsException) { /* Topic didn't exist — fine */ }
-
-        await adminClient.CreateTopicsAsync(new[]
-        {
-            new TopicSpecification
-            {
-                Name = _kafkaConfig.TopicName,
-                NumPartitions = _kafkaConfig.NumPartitions,
-                ReplicationFactor = 1
-            }
-        });
         
         _producer = new ProducerBuilder<Null, byte[]>(new ProducerConfig
         {
@@ -50,6 +27,8 @@ public class KafkaProducer : IMqProducer
             BatchSize = _kafkaConfig.BatchSize,
             EnableIdempotence = _kafkaConfig.EnableIdempotence
         }).Build();
+        
+        return Task.CompletedTask;
     }
 
     public async Task SendAsync(Message message)

@@ -7,6 +7,7 @@ public interface IMqImplementation
 {
     IMqConsumer CreateConsumer();
     IMqProducer CreateProducer();
+    IMqJanitor CreateJanitor();
 
     static string GetKey() => throw new NotImplementedException("The GetKey method is not implemented.");
 }

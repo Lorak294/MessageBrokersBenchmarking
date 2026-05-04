@@ -32,6 +32,7 @@ public class WorkerRegistry
     private TaskCompletionSource? _allWorkersReadyTcs;
     private TaskCompletionSource? _allWorkersFinishedTcs;
     private TaskCompletionSource? _allProducersFinishedTcs;
+    private TaskCompletionSource? _infrastructureReadyTcs;
     private readonly object _lock = new();
 
     public int ConnectedWorkerCount
@@ -134,6 +135,7 @@ public class WorkerRegistry
             _allWorkersReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _allWorkersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _allProducersFinishedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _infrastructureReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
     
@@ -196,6 +198,28 @@ public class WorkerRegistry
             }
             
             task = _allProducersFinishedTcs.Task;
+        }
+        return task.WaitAsync(timeout);
+    }
+
+    public void MarkInfrastructureReady()
+    {
+        lock (_lock)
+        {
+            _infrastructureReadyTcs?.TrySetResult();
+        }
+    }
+
+    public Task WaitForInfrastructureReadyAsync(TimeSpan timeout)
+    {
+        Task task;
+        lock (_lock)
+        {
+            if (_infrastructureReadyTcs == null || _infrastructureReadyTcs.Task.IsCompleted)
+            {
+                return Task.CompletedTask;
+            }
+            task = _infrastructureReadyTcs.Task;
         }
         return task.WaitAsync(timeout);
     }

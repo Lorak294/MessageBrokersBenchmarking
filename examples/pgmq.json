@@ -15,7 +15,7 @@
       "QueueMode": "NonPartitioned",
       "MessageReadMode": "Delete",
       "ConsumerMode": "ClientPoll",
-      "PollIntervalMs": "100",
+      "PollIntervalMs": "5",
       "MaxPollSeconds": "5",
       "NotifyThrottleMs": "250",
       "DelaySeconds": "0",

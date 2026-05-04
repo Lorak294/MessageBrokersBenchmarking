@@ -53,9 +53,6 @@ public class RabbitMqConsumer : IMqConsumer
                     autoDelete: rabbitConfig.QueueAutoDelete,
                     arguments: null);
                 
-                // Purge leftover messages from previous test run
-                await _channel.QueuePurgeAsync(_consumeQueueName);
-                
                 await _channel.BasicQosAsync(
                     prefetchSize: 0,
                     prefetchCount: rabbitConfig.PrefetchCount,
@@ -90,9 +87,6 @@ public class RabbitMqConsumer : IMqConsumer
                     queue: _consumeQueueName,
                     exchange: exchangeName,
                     routingKey: string.Empty);
-                
-                // Purge leftover messages
-                await _channel.QueuePurgeAsync(_consumeQueueName);
                 
                 await _channel.BasicQosAsync(
                     prefetchSize: 0,

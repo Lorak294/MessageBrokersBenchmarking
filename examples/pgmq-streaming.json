@@ -14,7 +14,7 @@
       "VisibilityTimeout": "30",
       "QueueMode": "NonPartitioned",
       "ConsumerMode": "ClientPoll",
-      "PollIntervalMs": "100"
+      "PollIntervalMs": "5"
     }
   }
 }

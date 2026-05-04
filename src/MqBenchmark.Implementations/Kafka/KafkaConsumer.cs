@@ -58,14 +58,12 @@ public class KafkaConsumer : IMqConsumer
 
         _consumer = new ConsumerBuilder<Null, byte[]>(consumerConfig).Build();
         
-        // Subscribe and wait for partition assignment (handles race with producer creating the topic)
+        // Subscribe and wait for partition assignment (topic guaranteed to exist via janitor)
         _consumer.Subscribe(_kafkaConfig.TopicName);
         var deadline = DateTime.UtcNow.AddSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
-            try { _consumer.Consume(TimeSpan.FromMilliseconds(500)); }
-            catch (ConsumeException) { /* Topic may not exist yet */ }
-            
+            _consumer.Consume(TimeSpan.FromMilliseconds(500));
             if (_consumer.Assignment.Count > 0) break;
         }
         
