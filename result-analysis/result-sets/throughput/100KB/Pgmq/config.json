@@ -4,7 +4,7 @@
   "communicationMode": "PointToPoint",
   "messageCount": 100000,
   "messageSizeInBytes": 100000,
-  "consumerIdleTimeoutSeconds": 30,
+  "consumerIdleTimeoutSeconds": 10,
   "mqConfig": {
     "implementation": "PgMq",
     "additionalSettings": {

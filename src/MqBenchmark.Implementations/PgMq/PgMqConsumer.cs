@@ -57,17 +57,14 @@ public class PgMqConsumer : IMqConsumer
         switch (_communicationMode)
         {
             case CommunicationMode.PointToPoint:
-                // Shared queue — all consumers compete for messages
                 _consumeQueueName = _config.QueueName;
                 await _pgmqClient.Queues.CreateAsync(_consumeQueueName, unlogged);
                 break;
 
             case CommunicationMode.PubSub:
-                // Per-group queue bound to topic pattern
                 _consumeQueueName = $"{_config.QueueName}_group_{configuration.ConsumerGroupIndex}";
                 await _pgmqClient.Queues.CreateAsync(_consumeQueueName, unlogged);
-                
-                // Bind to the routing key pattern so topic sends are delivered here
+
                 var routingKey = _config.RoutingKey;
                 if (!string.IsNullOrEmpty(routingKey))
                 {
@@ -76,7 +73,6 @@ public class PgMqConsumer : IMqConsumer
                 break;
 
             case CommunicationMode.Streaming:
-                // All consumer groups read from the same queue using offset tracking
                 _consumeQueueName = _config.QueueName;
                 await _pgmqClient.Queues.CreateAsync(_consumeQueueName, unlogged);
                 break;
@@ -127,13 +123,14 @@ public class PgMqConsumer : IMqConsumer
     private async Task RunStreamingLoop(Func<Message, Task> handler, CancellationToken ct)
     {
         long lastOffset = 0;
+        var batchSize = _config!.ConsumerBatchSize;
 
         while (!ct.IsCancellationRequested)
         {
             try
             {
                 var messages = await _pgmqClient!.Read.ReadFromOffsetAsync(
-                    _consumeQueueName!, lastOffset, qty: 10, ct: ct);
+                    _consumeQueueName!, lastOffset, qty: batchSize, ct: ct);
 
                 if (messages.Count > 0)
                 {
@@ -146,39 +143,70 @@ public class PgMqConsumer : IMqConsumer
                 }
                 else
                 {
-                    await Task.Delay(_config!.PollIntervalMs, ct);
+                    await Task.Delay(_config.PollIntervalMs, ct);
                 }
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error consuming PGMQ message (Streaming): {ex.Message}");
-                try { await Task.Delay(_config!.PollIntervalMs, ct); }
+                try { await Task.Delay(_config.PollIntervalMs, ct); }
                 catch (OperationCanceledException) { break; }
             }
         }
     }
 
     /// <summary>
-    /// Client-side polling: read/pop + Task.Delay back-off when queue is empty.
+    /// Client-side polling: read/pop batch + Task.Delay back-off when queue is empty.
     /// </summary>
     private async Task RunClientPollLoop(Func<Message, Task> handler, CancellationToken ct)
     {
         var usePopStrategy = _config!.UsePop && _config.MessageReadMode == PgMqConfig.ReadModeEnum.Delete;
+        var batchSize = _config.ConsumerBatchSize;
 
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                var pgmqMsg = await ReadOrPopSingle(usePopStrategy, ct);
-
-                if (pgmqMsg is not null)
+                if (usePopStrategy)
                 {
-                    await ProcessMessage(pgmqMsg, handler, messageDeleted: usePopStrategy, ct);
+                    var messages = await _pgmqClient!.Pop.PopAsync(_consumeQueueName!, qty: batchSize, ct: ct);
+                    if (messages.Count > 0)
+                    {
+                        foreach (var pgmqMsg in messages)
+                        {
+                            var message = Message.FromBytes(pgmqMsg.Payload);
+                            await handler(message);
+                        }
+                    }
+                    else
+                    {
+                        await Task.Delay(_config.PollIntervalMs, ct);
+                    }
                 }
                 else
                 {
-                    await Task.Delay(_config.PollIntervalMs, ct);
+                    var messages = await _pgmqClient!.Read.ReadAsync(
+                        _consumeQueueName!, _config.VisibilityTimeout, qty: batchSize, ct: ct);
+                    if (messages.Count > 0)
+                    {
+                        var msgIds = new long[messages.Count];
+                        for (int i = 0; i < messages.Count; i++)
+                        {
+                            var message = Message.FromBytes(messages[i].Payload);
+                            await handler(message);
+                            msgIds[i] = messages[i].MsgId;
+                        }
+                        // Batch delete/archive after processing
+                        if (_config.MessageReadMode == PgMqConfig.ReadModeEnum.Archive)
+                            await _pgmqClient!.Archive.ArchiveBatchAsync(_consumeQueueName!, msgIds, ct);
+                        else
+                            await _pgmqClient!.Delete.DeleteBatchAsync(_consumeQueueName!, msgIds, ct);
+                    }
+                    else
+                    {
+                        await Task.Delay(_config.PollIntervalMs, ct);
+                    }
                 }
             }
             catch (OperationCanceledException) { break; }
@@ -197,29 +225,41 @@ public class PgMqConsumer : IMqConsumer
     /// </summary>
     private async Task RunServerPollLoop(Func<Message, Task> handler, CancellationToken ct)
     {
+        var batchSize = _config!.ConsumerBatchSize;
+
         while (!ct.IsCancellationRequested)
         {
             try
             {
                 var messages = await _pgmqClient!.Read.ReadWithPollAsync(
                     _consumeQueueName!,
-                    _config!.VisibilityTimeout,
-                    qty: 1,
+                    _config.VisibilityTimeout,
+                    qty: batchSize,
                     maxPollSeconds: _config.MaxPollSeconds,
                     pollIntervalMs: _config.PollIntervalMs,
                     ct: ct);
 
                 if (messages.Count > 0)
                 {
-                    var pgmqMsg = messages[0];
-                    await ProcessMessage(pgmqMsg, handler, messageDeleted: false, ct);
+                    var msgIds = new long[messages.Count];
+                    for (int i = 0; i < messages.Count; i++)
+                    {
+                        var message = Message.FromBytes(messages[i].Payload);
+                        await handler(message);
+                        msgIds[i] = messages[i].MsgId;
+                    }
+                    // Batch delete/archive after processing
+                    if (_config.MessageReadMode == PgMqConfig.ReadModeEnum.Archive)
+                        await _pgmqClient!.Archive.ArchiveBatchAsync(_consumeQueueName!, msgIds, ct);
+                    else
+                        await _pgmqClient!.Delete.DeleteBatchAsync(_consumeQueueName!, msgIds, ct);
                 }
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error consuming PGMQ message (ServerPoll): {ex.Message}");
-                try { await Task.Delay(_config!.PollIntervalMs, ct); }
+                try { await Task.Delay(_config.PollIntervalMs, ct); }
                 catch (OperationCanceledException) { break; }
             }
         }
@@ -242,12 +282,13 @@ public class PgMqConsumer : IMqConsumer
                 bool gotMessage;
                 do
                 {
-                    var pgmqMsg = await PopSingle(ct);
-                    gotMessage = pgmqMsg is not null;
+                    var messages = await _pgmqClient!.Pop.PopAsync(_consumeQueueName!, qty: 1, ct: ct);
+                    gotMessage = messages.Count > 0;
 
-                    if (pgmqMsg is not null)
+                    if (gotMessage)
                     {
-                        await ProcessMessage(pgmqMsg, handler, messageDeleted: true, ct);
+                        var message = Message.FromBytes(messages[0].Payload);
+                        await handler(message);
                     }
                 } while (gotMessage && !ct.IsCancellationRequested);
             }
@@ -259,40 +300,5 @@ public class PgMqConsumer : IMqConsumer
                 catch (OperationCanceledException) { break; }
             }
         }
-    }
-
-    private async Task<PgmqMessage?> ReadOrPopSingle(bool usePop, CancellationToken ct)
-    {
-        if (usePop)
-        {
-            return await PopSingle(ct);
-        }
-
-        var messages = await _pgmqClient!.Read.ReadAsync(_consumeQueueName!, _config!.VisibilityTimeout, qty: 1, ct: ct);
-        return messages.Count > 0 ? messages[0] : null;
-    }
-
-    private async Task<PgmqMessage?> PopSingle(CancellationToken ct)
-    {
-        var messages = await _pgmqClient!.Pop.PopAsync(_consumeQueueName!, qty: 1, ct: ct);
-        return messages.Count > 0 ? messages[0] : null;
-    }
-
-    private async Task ProcessMessage(PgmqMessage pgmqMsg, Func<Message, Task> handler, bool messageDeleted, CancellationToken ct)
-    {
-        if (!messageDeleted)
-        {
-            if (_config!.MessageReadMode == PgMqConfig.ReadModeEnum.Archive)
-            {
-                await _pgmqClient!.Archive.ArchiveAsync(_consumeQueueName!, pgmqMsg.MsgId, ct);
-            }
-            else
-            {
-                await _pgmqClient!.Delete.DeleteAsync(_consumeQueueName!, pgmqMsg.MsgId, ct);
-            }
-        }
-
-        var message = Message.FromBytes(pgmqMsg.Payload);
-        await handler(message);
     }
 }

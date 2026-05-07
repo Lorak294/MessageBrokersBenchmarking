@@ -1,0 +1,22 @@
+{
+  "producersCount": 1,
+  "consumerGroups": [5],
+  "communicationMode": "PointToPoint",
+  "messageCount": 100000,
+  "messageSizeInBytes": 100000,
+  "consumerIdleTimeoutSeconds": 10,
+  "mqConfig": {
+    "implementation": "RabbitMQ",
+    "additionalSettings": {
+      "Hostname": "rabbitmq",
+      "Port": "5672",
+      "Username": "guest",
+      "Password": "guest",
+      "QueueName": "benchmark_throughput",
+      "DurableMode": "false",
+      "QueueAutodelete": "false",
+      "PrefetchCount": "500",
+      "ConsumerDispatchConcurrency": "1"
+    }
+  }
+}

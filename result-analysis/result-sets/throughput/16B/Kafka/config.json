@@ -4,7 +4,7 @@
   "communicationMode": "PointToPoint",
   "messageCount": 100000,
   "messageSizeInBytes": 16,
-  "consumerIdleTimeoutSeconds": 15,
+  "consumerIdleTimeoutSeconds": 10,
   "mqConfig": {
     "implementation": "Kafka",
     "additionalSettings": {

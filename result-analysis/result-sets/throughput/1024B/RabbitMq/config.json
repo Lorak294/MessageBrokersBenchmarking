@@ -4,7 +4,7 @@
   "communicationMode": "PointToPoint",
   "messageCount": 100000,
   "messageSizeInBytes": 1024,
-  "consumerIdleTimeoutSeconds": 30,
+  "consumerIdleTimeoutSeconds": 10,
   "mqConfig": {
     "implementation": "RabbitMQ",
     "additionalSettings": {
