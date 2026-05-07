@@ -53,7 +53,8 @@ public class KafkaConsumer : IMqConsumer
             BootstrapServers = _kafkaConfig.BootstrapServers,
             GroupId = groupId,
             AutoOffsetReset = _kafkaConfig.AutoOffsetReset,
-            EnableAutoCommit = _kafkaConfig.EnableAutoCommit
+            EnableAutoCommit = _kafkaConfig.EnableAutoCommit,
+            
         };
 
         _consumer = new ConsumerBuilder<Null, byte[]>(consumerConfig).Build();

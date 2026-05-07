@@ -1,23 +1,5 @@
 {
-  "title": "Throughput Comparison",
-  "testConfig": {
-    "messageSizeInBytes": "10000",
-    "messageCount": "100000",
-    "producersCount": "1",
-    "consumersCount": "1"
-  },
-  "resultSets": [
-    {
-      "name": "RabbitMQ",
-      "path": "result-sets/benchmark_rabbitMq.csv"
-    },
-    {
-      "name": "Apache Kafka",
-      "path": "result-sets/benchmark_kafka.csv"
-    },
-    {
-      "name": "PGMQ",
-      "path": "result-sets/benchmark_pgmq.csv"
-    }
-  ]
+  "title": "Throughput Comparison - Message Size 1p-1k",
+  "outputPath": "./throughput-results/1p1k",
+  "resultSetsDir": "./result-sets/throughput",
 }

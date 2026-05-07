@@ -1,0 +1,5 @@
+{
+  "title": "Throughput Comparison by Message Size",
+  "outputPath": "output",
+  "resultsSetsDir": "result-sets/throughput"
+}

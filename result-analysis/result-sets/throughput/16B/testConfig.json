@@ -1,0 +1,9 @@
+{
+  "title": "Throughput Comparison - 16B Message Size 1p-1k",
+  "testConfig": {
+    "messageSizeInBytes": "16",
+    "messageCount": "100000",
+    "producersCount": "1",
+    "consumersCount": "1"
+  }
+}

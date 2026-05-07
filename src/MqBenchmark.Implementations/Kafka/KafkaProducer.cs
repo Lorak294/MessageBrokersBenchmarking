@@ -25,7 +25,8 @@ public class KafkaProducer : IMqProducer
             Acks = _kafkaConfig.Acks,
             LingerMs = _kafkaConfig.LingerMs,
             BatchSize = _kafkaConfig.BatchSize,
-            EnableIdempotence = _kafkaConfig.EnableIdempotence
+            EnableIdempotence = _kafkaConfig.EnableIdempotence,
+            
         }).Build();
         
         return Task.CompletedTask;
@@ -45,7 +46,16 @@ public class KafkaProducer : IMqProducer
 
         if (_kafkaConfig.UseBufferedProducer)
         {
-            _producer.Produce(_kafkaConfig.TopicName, kafkaMessage);
+            try
+            {
+                _producer.Produce(_kafkaConfig.TopicName, kafkaMessage);
+            }
+            catch (ProduceException<Null, byte[]> ex) when (ex.Error.Code == ErrorCode.Local_QueueFull)
+            {
+                // Buffer full — flush pending messages and retry
+                _producer.Flush(TimeSpan.FromSeconds(5));
+                _producer.Produce(_kafkaConfig.TopicName, kafkaMessage);
+            }
         }
         else
         {
