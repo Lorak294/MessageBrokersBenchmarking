@@ -1,5 +1,11 @@
 {
-  "title": "Throughput Comparison - Message Size 1p-1k",
-  "outputPath": "./throughput-results/1p1k",
-  "resultSetsDir": "./result-sets/throughput",
+  "outputPath": "output",
+  "throughput": {
+    "title": "Throughput Comparison by Message Size",
+    "resultsSetsDir": "result-sets/throughput"
+  },
+  "latency": {
+    "title": "Latency Comparison",
+    "resultsSetsDir": "result-sets/latency"
+  }
 }
