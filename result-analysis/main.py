@@ -3,22 +3,28 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.stats import gaussian_kde
 
 TICKS_PER_MS = 10_000
 TICKS_PER_SEC = 10_000_000
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+COLOR_MAP = {
+    "RabbitMq": "#F28C28",
+    "Pgmq": "#3B7DD8",
+    "Kafka": "#4CAF50",
+}
+
 
 def load_config():
-    config_path = os.path.join(SCRIPT_DIR, "config.json")
+    config_path = os.path.join(SCRIPT_DIR, "plot-latency-config.json")
     with open(config_path) as f:
         return json.load(f)
 
 
-def load_result_set(path):
-    full_path = os.path.join(SCRIPT_DIR, path)
-    df = pd.read_csv(full_path)
+def load_results(csv_path):
+    df = pd.read_csv(csv_path)
     df["LatencyMs"] = (
         df["ReceiveTimestampTicks"] - df["SendTimestampTicks"]
     ) / TICKS_PER_MS
@@ -37,7 +43,7 @@ def compute_metrics(df, message_size_bytes):
         "Duration (s)": round(duration_sec, 4),
         "Throughput (msg/s)": round(msg_count / duration_sec, 2),
         "Throughput (MB/s)": round(
-            (msg_count * message_size_bytes) / duration_sec / 1_000_000, 2
+            (msg_count * message_size_bytes) / duration_sec / 1_000_000, 4
         ),
         "Avg Latency (ms)": round(latency.mean(), 4),
         "Median Latency (ms)": round(latency.median(), 4),
@@ -49,28 +55,45 @@ def compute_metrics(df, message_size_bytes):
     }
 
 
-def print_comparison_table(metrics_by_name):
-    metric_keys = list(next(iter(metrics_by_name.values())).keys())
-    names = list(metrics_by_name.keys())
+def discover_groups(results_dir):
+    groups = []
+    for group_name in sorted(os.listdir(results_dir)):
+        group_path = os.path.join(results_dir, group_name)
+        if not os.path.isdir(group_path):
+            continue
 
-    # Column widths
-    label_w = max(len(k) for k in metric_keys) + 2
-    col_w = max(max(len(n) for n in names), 15) + 2
+        test_config_path = os.path.join(group_path, "testConfig.json")
+        if not os.path.exists(test_config_path):
+            continue
 
-    # Header
-    header = f"{'Metric':<{label_w}}" + "".join(f"{n:>{col_w}}" for n in names)
-    print(header)
-    print("-" * len(header))
+        with open(test_config_path) as f:
+            test_config = json.load(f)
 
-    for key in metric_keys:
-        row = f"{key:<{label_w}}"
-        for name in names:
-            val = metrics_by_name[name][key]
-            row += f"{val:>{col_w}}"
-        print(row)
+        message_size = int(test_config["testConfig"]["messageSizeInBytes"])
+
+        columns = []
+        for col_name in sorted(os.listdir(group_path)):
+            col_path = os.path.join(group_path, col_name)
+            if not os.path.isdir(col_path):
+                continue
+            csv_path = os.path.join(col_path, "results.csv")
+            if os.path.exists(csv_path):
+                columns.append({"name": col_name, "csv_path": csv_path})
+
+        groups.append(
+            {
+                "name": group_name,
+                "title": test_config.get("title", group_name),
+                "message_size_bytes": message_size,
+                "test_config": test_config["testConfig"],
+                "columns": columns,
+            }
+        )
+
+    return groups
 
 
-def save_comparison_table(metrics_by_name, output_dir):
+def print_and_save_table(metrics_by_name, group_name, output_dir):
     metric_keys = list(next(iter(metrics_by_name.values())).keys())
     names = list(metrics_by_name.keys())
 
@@ -85,46 +108,51 @@ def save_comparison_table(metrics_by_name, output_dir):
     for key in metric_keys:
         row = f"{key:<{label_w}}"
         for name in names:
-            val = metrics_by_name[name][key]
-            row += f"{val:>{col_w}}"
+            row += f"{metrics_by_name[name][key]:>{col_w}}"
         lines.append(row)
 
-    path = os.path.join(output_dir, "comparison_table.txt")
+    table_text = "\n".join(lines)
+    print(table_text)
+    print()
+
+    path = os.path.join(output_dir, f"{group_name}_comparison_table.txt")
     with open(path, "w") as f:
-        f.write("\n".join(lines) + "\n")
-    print(f"\nSaved: {path}")
+        f.write(table_text + "\n")
+    print(f"Saved: {path}")
 
 
-def plot_latency_over_time(datasets, output_dir):
+def plot_latency_over_time(datasets, group_name, title, output_dir):
     plt.figure(figsize=(14, 6))
     for name, df in datasets.items():
-        plt.plot(df.index, df["LatencyMs"], label=name, alpha=0.7, linewidth=1.2)
+        color = COLOR_MAP.get(name, "gray")
+        plt.plot(
+            df.index, df["LatencyMs"], label=name, alpha=0.7, linewidth=1.2, color=color
+        )
     plt.xlabel("Message Index (ordered by send time)")
     plt.ylabel("Latency (ms)")
-    plt.title("Message Latency Over Time")
+    plt.title(f"{title} - Latency Over Time")
     plt.legend()
     plt.tight_layout()
-    path = os.path.join(output_dir, "latency_over_time.png")
+    path = os.path.join(output_dir, f"{group_name}_latency_over_time.png")
     plt.savefig(path, dpi=150)
-    print(f"\nSaved: {path}")
+    print(f"Saved: {path}")
     plt.show()
 
 
-def plot_latency_distribution(datasets, output_dir):
-    from scipy.stats import gaussian_kde
-
+def plot_latency_distribution(datasets, group_name, title, output_dir):
     plt.figure(figsize=(14, 6))
     for name, df in datasets.items():
+        color = COLOR_MAP.get(name, "gray")
         latency = df["LatencyMs"].values
         kde = gaussian_kde(latency)
         x = np.linspace(latency.min(), latency.max(), 500)
-        plt.plot(x, kde(x), label=name, linewidth=2)
+        plt.plot(x, kde(x), label=name, linewidth=2, color=color)
     plt.xlabel("Latency (ms)")
     plt.ylabel("Density")
-    plt.title("Message Latency Distribution")
+    plt.title(f"{title} - Latency Distribution")
     plt.legend()
     plt.tight_layout()
-    path = os.path.join(output_dir, "latency_distribution.png")
+    path = os.path.join(output_dir, f"{group_name}_latency_distribution.png")
     plt.savefig(path, dpi=150)
     print(f"Saved: {path}")
     plt.show()
@@ -132,34 +160,38 @@ def plot_latency_distribution(datasets, output_dir):
 
 def main():
     config = load_config()
-    test_config = config["testConfig"]
-    message_size = int(test_config["messageSizeInBytes"])
+    title = config["title"]
+    output_dir = os.path.join(SCRIPT_DIR, config["outputPath"])
+    results_dir = os.path.join(SCRIPT_DIR, config["resultsSetsDir"])
 
-    print(f"=== {config['title']} ===")
-    print(
-        f"Message size: {message_size} B | "
-        f"Count: {test_config['messageCount']} | "
-        f"Producers: {test_config['producersCount']} | "
-        f"Consumers: {test_config['consumersCount']}\n"
-    )
-
-    datasets = {}
-    metrics_by_name = {}
-
-    for rs in config["resultSets"]:
-        name = rs["name"]
-        df = load_result_set(rs["path"])
-        datasets[name] = df
-        metrics_by_name[name] = compute_metrics(df, message_size)
-
-    output_dir = os.path.join(SCRIPT_DIR, "output")
     os.makedirs(output_dir, exist_ok=True)
 
-    print_comparison_table(metrics_by_name)
-    save_comparison_table(metrics_by_name, output_dir)
+    print(f"=== {title} ===\n")
 
-    plot_latency_over_time(datasets, output_dir)
-    plot_latency_distribution(datasets, output_dir)
+    groups = discover_groups(results_dir)
+
+    for g in groups:
+        tc = g["test_config"]
+        print(f"--- {g['name']} ---")
+        print(
+            f"Message size: {g['message_size_bytes']} B | "
+            f"Count: {tc['messageCount']} | "
+            f"Producers: {tc['producersCount']} | "
+            f"Consumers: {tc['consumersCount']}\n"
+        )
+
+        datasets = {}
+        metrics_by_name = {}
+
+        for col in g["columns"]:
+            df = load_results(col["csv_path"])
+            datasets[col["name"]] = df
+            metrics_by_name[col["name"]] = compute_metrics(df, g["message_size_bytes"])
+
+        print_and_save_table(metrics_by_name, g["name"], output_dir)
+        plot_latency_over_time(datasets, g["name"], g["title"], output_dir)
+        plot_latency_distribution(datasets, g["name"], g["title"], output_dir)
+        print()
 
 
 if __name__ == "__main__":

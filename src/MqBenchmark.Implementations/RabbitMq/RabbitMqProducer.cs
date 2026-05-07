@@ -33,7 +33,11 @@ public class RabbitMqProducer : IMqProducer
         };
 
         _connection = await factory.CreateConnectionAsync();
-        _channel = await _connection.CreateChannelAsync();
+
+        var channelOptions = new CreateChannelOptions(
+            publisherConfirmationsEnabled: _rabbitConfig.PublisherConfirms,
+            publisherConfirmationTrackingEnabled: _rabbitConfig.PublisherConfirms);
+        _channel = await _connection.CreateChannelAsync(channelOptions);
 
         switch (_communicationMode)
         {

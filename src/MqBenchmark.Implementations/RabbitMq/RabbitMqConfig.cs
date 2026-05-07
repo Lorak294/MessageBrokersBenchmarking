@@ -17,7 +17,8 @@ public static class MqConfigRabbitMqExtensions
             DurableMode = bool.Parse(configuration.GetOptionalSetting("DurableMode", "false")),
             QueueAutoDelete = bool.Parse(configuration.GetOptionalSetting("QueueAutodelete", "false")),
             PrefetchCount = ushort.Parse(configuration.GetOptionalSetting("PrefetchCount", "100")),
-            ConsumerDispatchConcurrency = ushort.Parse(configuration.GetOptionalSetting("ConsumerDispatchConcurrency", "1"))
+            ConsumerDispatchConcurrency = ushort.Parse(configuration.GetOptionalSetting("ConsumerDispatchConcurrency", "1")),
+            PublisherConfirms = bool.Parse(configuration.GetOptionalSetting("PublisherConfirms", "false"))
         };
     }
 }
@@ -47,4 +48,11 @@ public record RabbitMqConfig
     /// Default: 1 (sequential processing).
     /// </summary>
     public ushort ConsumerDispatchConcurrency { get; init; } = 1;
+    /// <summary>
+    /// When true, enables publisher confirms on the channel. The producer will wait for
+    /// broker acknowledgment after each publish, ensuring the message has been persisted.
+    /// This gives accurate durable latency measurements but reduces throughput.
+    /// Default: false.
+    /// </summary>
+    public bool PublisherConfirms { get; init; } = false;
 }
