@@ -125,9 +125,8 @@ def plot_latency_over_time(datasets, group_name, title, output_dir):
     plt.figure(figsize=(14, 6))
     for name, df in datasets.items():
         color = COLOR_MAP.get(name, "gray")
-        plt.plot(
-            df.index, df["LatencyMs"], label=name, alpha=0.7, linewidth=1.2, color=color
-        )
+        smoothed = df["LatencyMs"].rolling(window=500, min_periods=1).mean()
+        plt.plot(df.index, smoothed, label=name, alpha=0.7, linewidth=1.2, color=color)
     plt.xlabel("Message Index (ordered by send time)")
     plt.ylabel("Latency (ms)")
     plt.title(f"{title} - Latency Over Time")
@@ -145,9 +144,11 @@ def plot_latency_distribution(datasets, group_name, title, output_dir):
         color = COLOR_MAP.get(name, "gray")
         latency = df["LatencyMs"].values
         kde = gaussian_kde(latency)
-        x = np.linspace(latency.min(), latency.max(), 500)
+        x_min = max(latency.min(), 1e-3)
+        x = np.logspace(np.log10(x_min), np.log10(latency.max()), 500)
         plt.plot(x, kde(x), label=name, linewidth=2, color=color)
-    plt.xlabel("Latency (ms)")
+    plt.xscale("log")
+    plt.xlabel("Latency (ms, log scale)")
     plt.ylabel("Density")
     plt.title(f"{title} - Latency Distribution")
     plt.legend()
