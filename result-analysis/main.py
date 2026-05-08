@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import gaussian_kde
+
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -362,16 +362,13 @@ def plot_latency_distribution(datasets, group_name, title, output_dir):
     plt.figure(figsize=(14, 6))
     for name, df in datasets.items():
         color = COLOR_MAP.get(name, "gray")
-        latency = df["LatencyMs"].values
-        log_latency = np.log10(np.maximum(latency, 1e-3))
-        kde = gaussian_kde(log_latency)
-        x_log = np.linspace(log_latency.min(), log_latency.max(), 500)
-        x = 10**x_log
-        plt.plot(x, kde(x_log), label=name, linewidth=2, color=color)
-    plt.xscale("log")
-    plt.xlabel("Latency (ms, log scale)")
-    plt.ylabel("Density")
-    plt.title(f"{title} - Latency Distribution")
+        latency = np.sort(df["LatencyMs"].values)
+        percentiles = np.linspace(0, 100, len(latency))
+        plt.plot(percentiles, latency, label=name, linewidth=2, color=color)
+    plt.yscale("log")
+    plt.xlabel("Percentile (%)")
+    plt.ylabel("Latency (ms)")
+    plt.title(f"{title} - Latency Percentiles")
     plt.legend()
     plt.tight_layout()
     path = os.path.join(output_dir, f"{group_name}_latency_distribution.png")
@@ -514,8 +511,9 @@ def plot_messaging_latency_over_time(data, mode_name, title, output_dir):
             if len(df) == 0:
                 continue
             smoothed = df["LatencyMs"].rolling(window=500, min_periods=1).mean()
+            smoothed = smoothed.iloc[100:]
             plt.plot(
-                df.index,
+                smoothed.index,
                 smoothed,
                 label=f"{broker_name} (Group {gid})",
                 alpha=0.7,
@@ -526,7 +524,7 @@ def plot_messaging_latency_over_time(data, mode_name, title, output_dir):
     plt.yscale("log")
     plt.ylabel("Latency (ms, log scale)")
     plt.title(f"{title} - Latency Over Time")
-    plt.legend(fontsize=8)
+    plt.legend(fontsize=8, bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
     path = os.path.join(output_dir, f"{mode_name}_messaging_latency_over_time.png")
     plt.savefig(path, dpi=150)
@@ -541,22 +539,20 @@ def plot_messaging_latency_distribution(data, mode_name, title, output_dir):
         for gid, df in sorted(groups_data.items()):
             if len(df) == 0:
                 continue
-            latency = df["LatencyMs"].values
-            kde = gaussian_kde(latency)
-            x_min = max(latency.min(), 1e-3)
-            x = np.logspace(np.log10(x_min), np.log10(latency.max()), 500)
+            latency = np.sort(df["LatencyMs"].values)
+            percentiles = np.linspace(0, 100, len(latency))
             plt.plot(
-                x,
-                kde(x),
+                percentiles,
+                latency,
                 label=f"{broker_name} (Group {gid})",
                 linewidth=2,
                 color=shades[gid % len(shades)],
             )
-    plt.xscale("log")
-    plt.xlabel("Latency (ms, log scale)")
-    plt.ylabel("Density")
-    plt.title(f"{title} - Latency Distribution")
-    plt.legend(fontsize=8)
+    plt.yscale("log")
+    plt.xlabel("Percentile (%)")
+    plt.ylabel("Latency (ms)")
+    plt.title(f"{title} - Latency Percentiles")
+    plt.legend(fontsize=8, bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
     path = os.path.join(output_dir, f"{mode_name}_messaging_latency_distribution.png")
     plt.savefig(path, dpi=150)
