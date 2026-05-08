@@ -2,7 +2,7 @@
   "producersCount": 1,
   "consumerGroups": [1],
   "communicationMode": "PointToPoint",
-  "messageCount": 1000,
+  "messagesPerConsumerGroup": [1000],
   "messageSizeInBytes": 255,
   "sendFrequencyMps": 200,
   "consumerIdleTimeoutSeconds": 15,
@@ -12,9 +12,7 @@
       "Hostname": "rabbitmq",
       "Port": "5672",
       "Username": "guest",
-      "Password": "guest",
-      "QueueName": "myqueue",
-      "ExchangeName": "benchmark-exchange"
+      "Password": "guest"
     }
   }
 }

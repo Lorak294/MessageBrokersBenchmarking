@@ -25,11 +25,32 @@ public class TestScheduler(
                 $"Requested {totalRequired} workers ({request.ProducersCount} producers + {totalConsumers} consumers), but only {workerCount} are connected.");
         }
         
+        // Validate streaming mode constraints: RabbitMQ and PGMQ streams don't support
+        // competing consumers within a group — each consumer reads the full log independently.
+        if (request.CommunicationMode == CommunicationMode.Streaming
+            && request.MqConfig.Implementation is "RabbitMQ" or "PgMq")
+        {
+            var invalidGroups = request.ConsumerGroups.Where(g => g > 1).ToArray();
+            if (invalidGroups.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Streaming mode for {request.MqConfig.Implementation} does not support multiple consumers per group " +
+                    $"(each consumer reads the full log independently). Use 1 consumer per group, e.g. [{string.Join(", ", request.ConsumerGroups.Select(_ => "1"))}] " +
+                    $"instead of [{string.Join(", ", request.ConsumerGroups)}].");
+            }
+        }
+        
         logger.LogInformation("Initializing test: Mode={Mode}, Producers={Producers}, ConsumerGroups={Groups}",
             request.CommunicationMode, request.ProducersCount, request.ConsumerGroups);
         
         // Reset timestamp aggregator for new test
         timestampAggregator.Reset();
+        
+        // Set expected messages per group for accurate loss calculation
+        if (request.CommunicationMode == CommunicationMode.PointToPoint)
+        {
+            timestampAggregator.SetExpectedMessagesPerGroup(request.GetMessagesPerGroup());
+        }
         
         // Reset worker state from any previous test run, then assign new roles
         workerRegistry.ResetReadiness();
@@ -40,7 +61,7 @@ public class TestScheduler(
         
         var janitorConfig = new JanitorConfig
         {
-            MqConfig = request.MqConfig,
+            MqConfig = request.MqConfig with { CommunicationMode = request.CommunicationMode, ConsumerGroupCount = request.ConsumerGroups.Length },
             CommunicationMode = request.CommunicationMode,
             ConsumerGroups = request.ConsumerGroups
         };
@@ -54,21 +75,59 @@ public class TestScheduler(
         
         await AssignWorkersAsync(allWorkers, request);
         
-        // Send config to producers
-        await hubContext.Clients.Group(OrchestratorConstants.ProducerGroup).SendAsync(
-            OrchestratorMethods.InitializeTest, new WorkerConfig
-            {
-                WorkerRole = WorkerConfig.Roles.Producer,
-                MessageCount = request.MessageCount,
-                MessageSizeInBytes = request.MessageSizeInBytes,
-                MqConfig = request.MqConfig with
-                {
-                    CommunicationMode = request.CommunicationMode,
-                },
-                SendFrequencyMps = request.SendFrequencyMps,
-            });
+        // Build routing plan for producers (only meaningful in PointToPoint)
+        RoutingPlan? routingPlan = null;
+        int totalMessageCount = request.GetTotalMessageCount();
         
-        // Send config to each consumer individually with their group index
+        if (request.CommunicationMode == CommunicationMode.PointToPoint)
+        {
+            var perGroup = request.GetMessagesPerGroup();
+            var targets = new RoutingTarget[perGroup.Length];
+            for (int i = 0; i < perGroup.Length; i++)
+            {
+                targets[i] = new RoutingTarget
+                {
+                    Target = $"group_{i}",
+                    MessageCount = perGroup[i]
+                };
+            }
+            routingPlan = new RoutingPlan { Targets = targets };
+        }
+        
+        // Compute per-producer message count
+        int messagesPerProducer = totalMessageCount / request.ProducersCount;
+        int producerRemainder = totalMessageCount % request.ProducersCount;
+        
+        // Send config to each producer with their share of the routing plan
+        var producerWorkers = allWorkers.Take(request.ProducersCount).ToList();
+        for (int p = 0; p < producerWorkers.Count; p++)
+        {
+            var producerMessageCount = messagesPerProducer + (p < producerRemainder ? 1 : 0);
+            
+            // Split routing plan proportionally across producers
+            RoutingPlan? producerRoutingPlan = null;
+            if (routingPlan != null)
+            {
+                producerRoutingPlan = SplitRoutingPlan(routingPlan, request.ProducersCount, p);
+            }
+            
+            await hubContext.Clients.Client(producerWorkers[p].ConnectionId).SendAsync(
+                OrchestratorMethods.InitializeTest, new WorkerConfig
+                {
+                    WorkerRole = WorkerConfig.Roles.Producer,
+                    MessageCount = producerMessageCount,
+                    MessageSizeInBytes = request.MessageSizeInBytes,
+                    MqConfig = request.MqConfig with
+                    {
+                        CommunicationMode = request.CommunicationMode,
+                        ConsumerGroupCount = request.ConsumerGroups.Length,
+                    },
+                    SendFrequencyMps = request.SendFrequencyMps,
+                    RoutingPlan = producerRoutingPlan,
+                });
+        }
+        
+        // Send config to each consumer individually with their group name
         int consumerIndex = 0;
         for (int groupIndex = 0; groupIndex < request.ConsumerGroups.Length; groupIndex++)
         {
@@ -80,12 +139,13 @@ public class TestScheduler(
                     OrchestratorMethods.InitializeTest, new WorkerConfig
                     {
                         WorkerRole = WorkerConfig.Roles.Consumer,
-                        MessageCount = request.MessageCount,
+                        MessageCount = totalMessageCount,
                         MessageSizeInBytes = request.MessageSizeInBytes,
                         MqConfig = request.MqConfig with
                         {
                             CommunicationMode = request.CommunicationMode,
-                            ConsumerGroupIndex = groupIndex,
+                            ConsumerGroupName = $"group_{groupIndex}",
+                            ConsumerGroupCount = request.ConsumerGroups.Length,
                         },
                         ConsumerIdleTimeoutSeconds = request.ConsumerIdleTimeoutSeconds,
                     });
@@ -94,7 +154,7 @@ public class TestScheduler(
         }
         
         // throws TimeoutException on timeout
-        await workerRegistry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(30)); // TODO: make timeout configurable
+        await workerRegistry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(30));
         logger.LogInformation("All workers acknowledged initialization.");
     }
     
@@ -119,6 +179,24 @@ public class TestScheduler(
         return results;
     }
 
+    /// <summary>
+    /// Splits a routing plan among multiple producers. Each producer gets a proportional share
+    /// of messages for each target.
+    /// </summary>
+    private static RoutingPlan SplitRoutingPlan(RoutingPlan plan, int producerCount, int producerIndex)
+    {
+        var targets = new RoutingTarget[plan.Targets.Length];
+        for (int i = 0; i < plan.Targets.Length; i++)
+        {
+            var total = plan.Targets[i].MessageCount;
+            var perProducer = total / producerCount;
+            var remainder = total % producerCount;
+            var count = perProducer + (producerIndex < remainder ? 1 : 0);
+            targets[i] = new RoutingTarget { Target = plan.Targets[i].Target, MessageCount = count };
+        }
+        return new RoutingPlan { Targets = targets };
+    }
+
     private async Task AssignWorkersAsync(List<WorkerInfo> allWorkers, InitializeRequest request)
     {
         int totalConsumers = request.TotalConsumersCount;
@@ -136,7 +214,6 @@ public class TestScheduler(
             }
             else if (i < request.ProducersCount + totalConsumers)
             {
-                // Determine which consumer group this worker belongs to
                 int consumerOffset = i - request.ProducersCount;
                 int groupIndex = 0;
                 int accumulated = 0;

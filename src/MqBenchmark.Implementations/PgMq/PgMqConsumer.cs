@@ -22,25 +22,11 @@ public class PgMqConsumer : IMqConsumer
 
         _consumptionCts?.Cancel();
 
-        try
-        {
-            _consumptionTask?.Wait(TimeSpan.FromSeconds(5));
-        }
-        catch (Exception)
-        {
-            // Ignore cancellation or timeout exceptions during disposal
-        }
+        try { _consumptionTask?.Wait(TimeSpan.FromSeconds(5)); }
+        catch { }
 
-        if (_notifyListener is not null)
-        {
-            _notifyListener.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
-
-        if (_pgmqClient is not null)
-        {
-            _pgmqClient.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
-
+        _notifyListener?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        _pgmqClient?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _consumptionCts?.Dispose();
         _disposed = true;
     }
@@ -49,6 +35,8 @@ public class PgMqConsumer : IMqConsumer
     {
         _config = configuration.ToPgMqConfig();
         _communicationMode = configuration.CommunicationMode;
+        var groupName = configuration.ConsumerGroupName;
+        
         _pgmqClient = new PgmqClient(_config.ConnectionString);
         await _pgmqClient.OpenAsync();
 
@@ -57,28 +45,20 @@ public class PgMqConsumer : IMqConsumer
         switch (_communicationMode)
         {
             case CommunicationMode.PointToPoint:
-                _consumeQueueName = _config.QueueName;
-                await _pgmqClient.Queues.CreateAsync(_consumeQueueName, unlogged);
-                break;
-
             case CommunicationMode.PubSub:
-                _consumeQueueName = $"{_config.QueueName}_group_{configuration.ConsumerGroupIndex}";
+                // Both modes: consume from per-group queue (created by janitor)
+                _consumeQueueName = PgMqNaming.GroupQueue(groupName!);
                 await _pgmqClient.Queues.CreateAsync(_consumeQueueName, unlogged);
-
-                var routingKey = _config.RoutingKey;
-                if (!string.IsNullOrEmpty(routingKey))
-                {
-                    await _pgmqClient.Topics.BindAsync(routingKey, _consumeQueueName);
-                }
                 break;
 
             case CommunicationMode.Streaming:
-                _consumeQueueName = _config.QueueName;
+                // All consumers read from shared stream queue using offsets
+                _consumeQueueName = PgMqNaming.StreamQueue();
                 await _pgmqClient.Queues.CreateAsync(_consumeQueueName, unlogged);
                 break;
         }
 
-        // For ListenNotify mode (PointToPoint/PubSub only), enable notifications
+        // For ListenNotify mode (PointToPoint/PubSub only)
         if (_communicationMode != CommunicationMode.Streaming
             && _config.ConsumerMode == PgMqConfig.ConsumerModeEnum.ListenNotify)
         {
@@ -91,9 +71,7 @@ public class PgMqConsumer : IMqConsumer
     public Task SubscribeAsync(Func<Message, Task> messageReceivedHandler)
     {
         if (_pgmqClient is null || _config is null || _consumeQueueName is null)
-        {
-            throw new InvalidOperationException("Consumer is not initialized. Call InitializeAsync first.");
-        }
+            throw new InvalidOperationException("Consumer is not initialized.");
 
         _consumptionCts = new CancellationTokenSource();
         var ct = _consumptionCts.Token;
@@ -109,17 +87,13 @@ public class PgMqConsumer : IMqConsumer
                 PgMqConfig.ConsumerModeEnum.ClientPoll => Task.Run(() => RunClientPollLoop(messageReceivedHandler, ct), ct),
                 PgMqConfig.ConsumerModeEnum.ServerPoll => Task.Run(() => RunServerPollLoop(messageReceivedHandler, ct), ct),
                 PgMqConfig.ConsumerModeEnum.ListenNotify => Task.Run(() => RunListenNotifyLoop(messageReceivedHandler, ct), ct),
-                _ => throw new ArgumentOutOfRangeException(nameof(_config.ConsumerMode))
+                _ => throw new ArgumentOutOfRangeException()
             };
         }
 
         return Task.CompletedTask;
     }
 
-    /// <summary>
-    /// Streaming mode: reads messages from queue using offset tracking.
-    /// Does NOT delete or archive messages — all consumer groups independently read the same data.
-    /// </summary>
     private async Task RunStreamingLoop(Func<Message, Task> handler, CancellationToken ct)
     {
         long lastOffset = 0;
@@ -156,9 +130,6 @@ public class PgMqConsumer : IMqConsumer
         }
     }
 
-    /// <summary>
-    /// Client-side polling: read/pop batch + Task.Delay back-off when queue is empty.
-    /// </summary>
     private async Task RunClientPollLoop(Func<Message, Task> handler, CancellationToken ct)
     {
         var usePopStrategy = _config!.UsePop && _config.MessageReadMode == PgMqConfig.ReadModeEnum.Delete;
@@ -197,7 +168,6 @@ public class PgMqConsumer : IMqConsumer
                             await handler(message);
                             msgIds[i] = messages[i].MsgId;
                         }
-                        // Batch delete/archive after processing
                         if (_config.MessageReadMode == PgMqConfig.ReadModeEnum.Archive)
                             await _pgmqClient!.Archive.ArchiveBatchAsync(_consumeQueueName!, msgIds, ct);
                         else
@@ -219,10 +189,6 @@ public class PgMqConsumer : IMqConsumer
         }
     }
 
-    /// <summary>
-    /// Server-side long-polling: pgmq.read_with_poll() blocks in PostgreSQL until
-    /// messages arrive or max_poll_seconds elapses.
-    /// </summary>
     private async Task RunServerPollLoop(Func<Message, Task> handler, CancellationToken ct)
     {
         var batchSize = _config!.ConsumerBatchSize;
@@ -248,7 +214,6 @@ public class PgMqConsumer : IMqConsumer
                         await handler(message);
                         msgIds[i] = messages[i].MsgId;
                     }
-                    // Batch delete/archive after processing
                     if (_config.MessageReadMode == PgMqConfig.ReadModeEnum.Archive)
                         await _pgmqClient!.Archive.ArchiveBatchAsync(_consumeQueueName!, msgIds, ct);
                     else
@@ -265,10 +230,6 @@ public class PgMqConsumer : IMqConsumer
         }
     }
 
-    /// <summary>
-    /// Event-driven LISTEN/NOTIFY: waits for insert notifications, then pops messages.
-    /// Includes periodic fallback sweep.
-    /// </summary>
     private async Task RunListenNotifyLoop(Func<Message, Task> handler, CancellationToken ct)
     {
         var fallbackInterval = TimeSpan.FromSeconds(Math.Max(_config!.MaxPollSeconds, 1));
@@ -284,7 +245,6 @@ public class PgMqConsumer : IMqConsumer
                 {
                     var messages = await _pgmqClient!.Pop.PopAsync(_consumeQueueName!, qty: 1, ct: ct);
                     gotMessage = messages.Count > 0;
-
                     if (gotMessage)
                     {
                         var message = Message.FromBytes(messages[0].Payload);

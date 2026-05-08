@@ -19,25 +19,48 @@ public class PgMqJanitor : IMqJanitor
         switch (config.CommunicationMode)
         {
             case CommunicationMode.PointToPoint:
-            case CommunicationMode.Streaming:
-                await _pgmqClient.Queues.CreateAsync(pgConfig.QueueName, unlogged);
-                await _pgmqClient.Queues.PurgeAsync(pgConfig.QueueName);
+                await PreparePointToPoint(config, pgConfig, unlogged);
                 break;
-
             case CommunicationMode.PubSub:
-                for (int i = 0; i < config.ConsumerGroups.Length; i++)
-                {
-                    var queueName = $"{pgConfig.QueueName}_group_{i}";
-                    await _pgmqClient.Queues.CreateAsync(queueName, unlogged);
-                    await _pgmqClient.Queues.PurgeAsync(queueName);
-
-                    if (!string.IsNullOrEmpty(pgConfig.RoutingKey))
-                    {
-                        await _pgmqClient.Topics.BindAsync(pgConfig.RoutingKey, queueName);
-                    }
-                }
+                await PreparePubSub(config, pgConfig, unlogged);
+                break;
+            case CommunicationMode.Streaming:
+                await PrepareStreaming(pgConfig, unlogged);
                 break;
         }
+    }
+
+    private async Task PreparePointToPoint(JanitorConfig config, PgMqConfig pgConfig, bool unlogged)
+    {
+        // Per-group queues with topic routing
+        for (int i = 0; i < config.ConsumerGroups.Length; i++)
+        {
+            var groupName = $"group_{i}";
+            var queueName = PgMqNaming.GroupQueue(groupName);
+            await _pgmqClient!.Queues.CreateAsync(queueName, unlogged);
+            await _pgmqClient.Queues.PurgeAsync(queueName);
+            await _pgmqClient.Topics.BindAsync(PgMqNaming.GroupRoutingKey(groupName), queueName);
+        }
+    }
+
+    private async Task PreparePubSub(JanitorConfig config, PgMqConfig pgConfig, bool unlogged)
+    {
+        // Per-group queues all bound to broadcast routing key
+        for (int i = 0; i < config.ConsumerGroups.Length; i++)
+        {
+            var groupName = $"group_{i}";
+            var queueName = PgMqNaming.GroupQueue(groupName);
+            await _pgmqClient!.Queues.CreateAsync(queueName, unlogged);
+            await _pgmqClient.Queues.PurgeAsync(queueName);
+            await _pgmqClient.Topics.BindAsync(PgMqNaming.BroadcastRoutingKey(), queueName);
+        }
+    }
+
+    private async Task PrepareStreaming(PgMqConfig pgConfig, bool unlogged)
+    {
+        var queueName = PgMqNaming.StreamQueue();
+        await _pgmqClient!.Queues.CreateAsync(queueName, unlogged);
+        await _pgmqClient.Queues.PurgeAsync(queueName);
     }
 
     public void Dispose()

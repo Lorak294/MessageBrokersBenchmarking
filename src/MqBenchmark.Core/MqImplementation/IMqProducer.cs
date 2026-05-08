@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using MqBenchmark.Core.Config;
 
 namespace MqBenchmark.Core.MqImplementation;
@@ -6,5 +5,5 @@ namespace MqBenchmark.Core.MqImplementation;
 public interface IMqProducer : IDisposable
 {
     Task InitializeAsync(MqConfig configuration);
-    Task SendAsync(Message message);
+    Task SendAsync(Message message, string? routingTarget = null);
 }

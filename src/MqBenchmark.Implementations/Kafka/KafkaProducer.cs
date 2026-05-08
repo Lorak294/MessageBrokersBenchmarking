@@ -8,6 +8,7 @@ public class KafkaProducer : IMqProducer
 {
     private IProducer<Null, byte[]>? _producer;
     private KafkaConfig? _kafkaConfig;
+    private CommunicationMode _communicationMode;
     
     public void Dispose()
     {
@@ -18,6 +19,7 @@ public class KafkaProducer : IMqProducer
     public Task InitializeAsync(MqConfig configuration)
     {
         _kafkaConfig = configuration.ToKafkaConfig();
+        _communicationMode = configuration.CommunicationMode;
         
         _producer = new ProducerBuilder<Null, byte[]>(new ProducerConfig
         {
@@ -26,47 +28,42 @@ public class KafkaProducer : IMqProducer
             LingerMs = _kafkaConfig.LingerMs,
             BatchSize = _kafkaConfig.BatchSize,
             EnableIdempotence = _kafkaConfig.EnableIdempotence,
-            
         }).Build();
         
         return Task.CompletedTask;
     }
 
-    public async Task SendAsync(Message message)
+    public async Task SendAsync(Message message, string? routingTarget = null)
     {
         if (_producer == null || _kafkaConfig == null)
-        {
-            throw new InvalidOperationException("Producer is not initialized. Call InitializeAsync first.");
-        }
+            throw new InvalidOperationException("Producer is not initialized.");
 
-        var kafkaMessage = new Message<Null, byte[]>
+        // Determine target topic based on mode
+        var topicName = _communicationMode switch
         {
-            Value = message.Payload
+            CommunicationMode.PointToPoint => KafkaNaming.GroupTopic(routingTarget ?? throw new InvalidOperationException("PointToPoint requires a routing target.")),
+            CommunicationMode.PubSub => KafkaNaming.SharedTopic(),
+            CommunicationMode.Streaming => KafkaNaming.SharedTopic(),
+            _ => throw new InvalidOperationException($"Unsupported mode: {_communicationMode}")
         };
+
+        var kafkaMessage = new Message<Null, byte[]> { Value = message.Payload };
 
         if (_kafkaConfig.UseBufferedProducer)
         {
             try
             {
-                _producer.Produce(_kafkaConfig.TopicName, kafkaMessage);
+                _producer.Produce(topicName, kafkaMessage);
             }
             catch (ProduceException<Null, byte[]> ex) when (ex.Error.Code == ErrorCode.Local_QueueFull)
             {
-                // Buffer full — flush pending messages and retry
                 _producer.Flush(TimeSpan.FromSeconds(5));
-                _producer.Produce(_kafkaConfig.TopicName, kafkaMessage);
+                _producer.Produce(topicName, kafkaMessage);
             }
         }
         else
         {
-            try
-            {
-                await _producer.ProduceAsync(_kafkaConfig.TopicName, kafkaMessage);
-            }
-            catch (ProduceException<Null, byte[]> e)
-            {
-                Console.WriteLine($"Failed to produce message to Kafka topic {_kafkaConfig.TopicName}: {e.Error.Reason}");
-            }
+            await _producer.ProduceAsync(topicName, kafkaMessage);
         }
     }
 }

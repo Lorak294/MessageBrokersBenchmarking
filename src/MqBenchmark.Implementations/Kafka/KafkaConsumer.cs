@@ -7,10 +7,8 @@ namespace MqBenchmark.Implementations.Kafka;
 public class KafkaConsumer : IMqConsumer
 {
     private IConsumer<Null, byte[]>? _consumer;
-    private KafkaConfig? _kafkaConfig;
     private CancellationTokenSource? _consumptionCts;
     private Task? _consumptionTask;
-   
     private bool _disposed;
 
     public void Dispose()
@@ -21,15 +19,11 @@ public class KafkaConsumer : IMqConsumer
         
         try
         {
-            // Wait for the consumption loop to finish gracefully
             _consumptionTask?.Wait(TimeSpan.FromSeconds(5));
         }
-        catch (Exception)
-        {
-            // Ignore cancellation or timeout exceptions during disposal
-        }
+        catch { }
 
-        _consumer?.Close(); // Commit offsets and leave group cleanly
+        _consumer?.Close();
         _consumer?.Dispose();
         _consumptionCts?.Dispose();
         _disposed = true;
@@ -37,30 +31,45 @@ public class KafkaConsumer : IMqConsumer
 
     public Task InitializeAsync(MqConfig configuration)
     {
-        _kafkaConfig = configuration.ToKafkaConfig();
+        var kafkaConfig = configuration.ToKafkaConfig();
+        var groupName = configuration.ConsumerGroupName;
 
-        // For PubSub/Streaming, each consumer group gets a unique GroupId
-        // so each group independently receives all messages.
-        // For PointToPoint, all consumers share the same GroupId (competing consumers).
-        var groupId = _kafkaConfig.GroupId;
-        if (configuration.CommunicationMode is CommunicationMode.PubSub or CommunicationMode.Streaming)
+        // Determine topic to subscribe to and group ID based on mode
+        string topicName;
+        string groupId;
+
+        switch (configuration.CommunicationMode)
         {
-            groupId = $"{groupId}_group_{configuration.ConsumerGroupIndex}";
+            case CommunicationMode.PointToPoint:
+                // Each consumer group has its own topic; consumers in that group compete
+                topicName = KafkaNaming.GroupTopic(groupName!);
+                groupId = KafkaNaming.SharedGroupId(groupName!);
+                break;
+
+            case CommunicationMode.PubSub:
+            case CommunicationMode.Streaming:
+                // All groups read from shared topic; each group has unique GroupId
+                // so each group independently receives all messages
+                topicName = KafkaNaming.SharedTopic();
+                groupId = KafkaNaming.GroupId(groupName!);
+                break;
+
+            default:
+                throw new InvalidOperationException($"Unsupported mode: {configuration.CommunicationMode}");
         }
 
         var consumerConfig = new ConsumerConfig
         {
-            BootstrapServers = _kafkaConfig.BootstrapServers,
+            BootstrapServers = kafkaConfig.BootstrapServers,
             GroupId = groupId,
-            AutoOffsetReset = _kafkaConfig.AutoOffsetReset,
-            EnableAutoCommit = _kafkaConfig.EnableAutoCommit,
-            
+            AutoOffsetReset = kafkaConfig.AutoOffsetReset,
+            EnableAutoCommit = kafkaConfig.EnableAutoCommit,
         };
 
         _consumer = new ConsumerBuilder<Null, byte[]>(consumerConfig).Build();
         
-        // Subscribe and wait for partition assignment (topic guaranteed to exist via janitor)
-        _consumer.Subscribe(_kafkaConfig.TopicName);
+        // Subscribe and wait for partition assignment
+        _consumer.Subscribe(topicName);
         var deadline = DateTime.UtcNow.AddSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
@@ -73,12 +82,9 @@ public class KafkaConsumer : IMqConsumer
 
     public Task SubscribeAsync(Func<Message, Task> messageReceivedHandler)
     {
-        if (_consumer == null || _kafkaConfig == null)
-        {
-            throw new InvalidOperationException("Consumer is not initialized. Call InitializeAsync first.");
-        }
+        if (_consumer == null)
+            throw new InvalidOperationException("Consumer is not initialized.");
 
-        // Consumer is already subscribed and has partition assignments from InitializeAsync.
         _consumptionCts = new CancellationTokenSource();
 
         _consumptionTask = Task.Run(async () =>
@@ -88,18 +94,13 @@ public class KafkaConsumer : IMqConsumer
                 try
                 {
                     var consumeResult = _consumer.Consume(_consumptionCts.Token);
-
                     if (consumeResult?.Message != null)
                     {
-                        var messageContent = consumeResult.Message.Value;
-                        var message = Message.FromBytes(messageContent);
+                        var message = Message.FromBytes(consumeResult.Message.Value);
                         await messageReceivedHandler(message);
                     }
                 }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                catch (OperationCanceledException) { break; }
                 catch (ConsumeException ex)
                 {
                     Console.WriteLine($"Error consuming message: {ex.Error.Reason}");

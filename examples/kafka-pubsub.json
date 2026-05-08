@@ -10,8 +10,6 @@
     "implementation": "Kafka",
     "additionalSettings": {
       "BootstrapServers": "kafka:9092",
-      "TopicName": "benchmark-topic",
-      "GroupId": "benchmark-group",
       "Acks": "Leader",
       "LingerMs": "5",
       "BatchSize": "65536",

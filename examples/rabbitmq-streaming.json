@@ -12,9 +12,7 @@
       "Hostname": "rabbitmq",
       "Port": "5672",
       "Username": "guest",
-      "Password": "guest",
-      "QueueName": "benchmark-stream",
-      "ExchangeName": "benchmark-exchange"
+      "Password": "guest"
     }
   }
 }

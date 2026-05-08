@@ -143,10 +143,7 @@ public class Worker(
     private async Task ExecuteProducerTest()
     {
         if(_config == null)
-        {
             throw new InvalidOperationException("Worker configuration is not initialized.");
-        }
-        
         if(_producer == null)
             throw new InvalidOperationException("Producer is not initialized!");
 
@@ -158,6 +155,11 @@ public class Worker(
         long minSendTicks = long.MaxValue;
         long maxSendTicks = 0;
 
+        // Build round-robin iterator from routing plan (or null for broadcast modes)
+        var routingIterator = _config.RoutingPlan != null
+            ? new RoundRobinRoutingIterator(_config.RoutingPlan)
+            : null;
+
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < _config.MessageCount; i++)
         {
@@ -167,8 +169,10 @@ public class Worker(
             var message = Message.CreateMessage(_config.MessageSizeInBytes);
             _messageTimestamps[message.Id] = DateTime.UtcNow.Ticks;
 
+            var routingTarget = routingIterator?.Next();
+
             var sendStart = Stopwatch.GetTimestamp();
-            await _producer.SendAsync(message);
+            await _producer.SendAsync(message, routingTarget);
             var sendElapsed = Stopwatch.GetTimestamp() - sendStart;
 
             totalSendTicks += sendElapsed;
@@ -187,6 +191,39 @@ public class Worker(
             "AvgInterval={AvgInterval:F3}ms, AvgSend={AvgSend:F3}ms, MinSend={MinSend:F3}ms, MaxSend={MaxSend:F3}ms",
             _config.MessageCount, sw.Elapsed.TotalSeconds,
             avgIntervalMs, avgSendMs, minSendMs, maxSendMs);
+    }
+
+    /// <summary>
+    /// Round-robins across routing targets, skipping exhausted ones.
+    /// </summary>
+    private class RoundRobinRoutingIterator
+    {
+        private readonly (string target, int remaining)[] _targets;
+        private int _currentIndex;
+
+        public RoundRobinRoutingIterator(RoutingPlan plan)
+        {
+            _targets = plan.Targets.Select(t => (t.Target, t.MessageCount)).ToArray();
+            _currentIndex = 0;
+        }
+
+        public string Next()
+        {
+            // Find next target with remaining messages
+            for (int attempts = 0; attempts < _targets.Length; attempts++)
+            {
+                var idx = _currentIndex % _targets.Length;
+                if (_targets[idx].remaining > 0)
+                {
+                    _targets[idx].remaining--;
+                    _currentIndex = idx + 1;
+                    return _targets[idx].target;
+                }
+                _currentIndex++;
+            }
+            // All exhausted — shouldn't happen if MessageCount matches plan total
+            return _targets[0].target;
+        }
     }
 
     private async Task ExecuteConsumerTest()
@@ -294,7 +331,15 @@ public class Worker(
             WorkerId = Id,
             Role = role,
             Timestamps = timestamps,
-            ConsumerGroupIndex = _config?.MqConfig.ConsumerGroupIndex ?? 0
+            ConsumerGroupIndex = ParseGroupIndex(_config?.MqConfig.ConsumerGroupName)
         };
+    }
+
+    private static int ParseGroupIndex(string? groupName)
+    {
+        if (groupName == null) return 0;
+        // Expected format: "group_0", "group_1", etc.
+        var parts = groupName.Split('_');
+        return parts.Length >= 2 && int.TryParse(parts[^1], out var idx) ? idx : 0;
     }
 }

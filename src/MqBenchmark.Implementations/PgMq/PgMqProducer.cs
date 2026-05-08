@@ -15,21 +15,19 @@ public class PgMqProducer : IMqProducer
     private readonly SemaphoreSlim _bufferSemaphore = new(1, 1);
     private Timer? _lingerTimer;
     private bool _timerRunning;
+    private string? _lastRoutingTarget; // Track current target for buffered flush
 
     public void Dispose()
     {
         _lingerTimer?.Dispose();
 
-        // Flush remaining buffered messages
         if (_config?.UseBufferedProducer == true && _buffer.Count > 0)
         {
             _bufferSemaphore.Wait();
             try
             {
                 if (_buffer.Count > 0)
-                {
                     FlushBufferAsync().GetAwaiter().GetResult();
-                }
             }
             catch (Exception ex)
             {
@@ -41,10 +39,7 @@ public class PgMqProducer : IMqProducer
             }
         }
 
-        if (_pgmqClient is not null)
-        {
-            _pgmqClient.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
+        _pgmqClient?.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     public async Task InitializeAsync(MqConfig configuration)
@@ -54,18 +49,11 @@ public class PgMqProducer : IMqProducer
         _pgmqClient = new PgmqClient(_config.ConnectionString);
         await _pgmqClient.OpenAsync();
 
-        var unlogged = _config.QueueMode == PgMqConfig.QueueModeEnum.Unlogged;
-
-        switch (_communicationMode)
+        // For Streaming, ensure the queue exists (producer writes directly)
+        if (_communicationMode == CommunicationMode.Streaming)
         {
-            case CommunicationMode.PointToPoint:
-            case CommunicationMode.Streaming:
-                await _pgmqClient.Queues.CreateAsync(_config.QueueName, unlogged);
-                break;
-
-            case CommunicationMode.PubSub:
-                // Producer doesn't create queues — janitor handles that.
-                break;
+            var unlogged = _config.QueueMode == PgMqConfig.QueueModeEnum.Unlogged;
+            await _pgmqClient.Queues.CreateAsync(PgMqNaming.StreamQueue(), unlogged);
         }
 
         if (_config.UseBufferedProducer)
@@ -74,22 +62,27 @@ public class PgMqProducer : IMqProducer
         }
     }
 
-    public async Task SendAsync(Message message)
+    public async Task SendAsync(Message message, string? routingTarget = null)
     {
         if (_pgmqClient is null || _config is null)
-        {
-            throw new InvalidOperationException("Producer is not initialized. Call InitializeAsync first.");
-        }
+            throw new InvalidOperationException("Producer is not initialized.");
 
         if (!_config.UseBufferedProducer)
         {
-            await SendSingleAsync(message);
+            await SendSingleAsync(message, routingTarget);
             return;
         }
 
         await _bufferSemaphore.WaitAsync();
         try
         {
+            // If target changed, flush existing buffer first
+            if (_buffer.Count > 0 && _lastRoutingTarget != routingTarget)
+            {
+                await FlushBufferAsync();
+            }
+            _lastRoutingTarget = routingTarget;
+
             _buffer.Add(message.Payload);
             if (_buffer.Count >= _config.ProducerBatchSize)
             {
@@ -107,33 +100,41 @@ public class PgMqProducer : IMqProducer
         }
     }
 
-    private async Task SendSingleAsync(Message message)
+    private async Task SendSingleAsync(Message message, string? routingTarget)
     {
         switch (_communicationMode)
         {
             case CommunicationMode.PointToPoint:
-            case CommunicationMode.Streaming:
+                // Route to specific group via topic routing key
+                var groupKey = PgMqNaming.GroupRoutingKey(routingTarget ?? throw new InvalidOperationException("PointToPoint requires a routing target."));
                 if (_config!.DelaySeconds > 0)
-                    await _pgmqClient!.Send.SendAsync(_config.QueueName, message.Payload, _config.DelaySeconds);
+                    await _pgmqClient!.Topics.SendAsync(groupKey, message.Payload, _config.DelaySeconds);
                 else
-                    await _pgmqClient!.Send.SendAsync(_config.QueueName, message.Payload);
+                    await _pgmqClient!.Topics.SendAsync(groupKey, message.Payload);
                 break;
 
             case CommunicationMode.PubSub:
-                var routingKey = _config!.RoutingKey;
-                if (string.IsNullOrEmpty(routingKey))
-                    throw new InvalidOperationException("RoutingKey must be configured for PubSub mode with PGMQ.");
-                if (_config.DelaySeconds > 0)
-                    await _pgmqClient!.Topics.SendAsync(routingKey, message.Payload, _config.DelaySeconds);
+                // Broadcast to all groups via broadcast routing key
+                var broadcastKey = PgMqNaming.BroadcastRoutingKey();
+                if (_config!.DelaySeconds > 0)
+                    await _pgmqClient!.Topics.SendAsync(broadcastKey, message.Payload, _config.DelaySeconds);
                 else
-                    await _pgmqClient!.Topics.SendAsync(routingKey, message.Payload);
+                    await _pgmqClient!.Topics.SendAsync(broadcastKey, message.Payload);
+                break;
+
+            case CommunicationMode.Streaming:
+                // Write directly to shared stream queue
+                var queueName = PgMqNaming.StreamQueue();
+                if (_config!.DelaySeconds > 0)
+                    await _pgmqClient!.Send.SendAsync(queueName, message.Payload, _config.DelaySeconds);
+                else
+                    await _pgmqClient!.Send.SendAsync(queueName, message.Payload);
                 break;
         }
     }
 
     private async Task FlushBufferAsync()
     {
-        // Assumes semaphore is held by caller
         if (_buffer.Count == 0) return;
 
         var payloads = _buffer.ToList();
@@ -144,35 +145,38 @@ public class PgMqProducer : IMqProducer
         switch (_communicationMode)
         {
             case CommunicationMode.PointToPoint:
-            case CommunicationMode.Streaming:
+                var groupKey = PgMqNaming.GroupRoutingKey(_lastRoutingTarget!);
                 if (_config!.DelaySeconds > 0)
-                    await _pgmqClient!.Send.SendBatchAsync(_config.QueueName, payloads, _config.DelaySeconds);
+                    await _pgmqClient!.Topics.SendBatchAsync(groupKey, payloads, _config.DelaySeconds);
                 else
-                    await _pgmqClient!.Send.SendBatchAsync(_config.QueueName, payloads);
+                    await _pgmqClient!.Topics.SendBatchAsync(groupKey, payloads);
                 break;
 
             case CommunicationMode.PubSub:
-                var routingKey = _config!.RoutingKey;
-                if (string.IsNullOrEmpty(routingKey))
-                    throw new InvalidOperationException("RoutingKey must be configured for PubSub mode with PGMQ.");
-                if (_config.DelaySeconds > 0)
-                    await _pgmqClient!.Topics.SendBatchAsync(routingKey, payloads, _config.DelaySeconds);
+                var broadcastKey = PgMqNaming.BroadcastRoutingKey();
+                if (_config!.DelaySeconds > 0)
+                    await _pgmqClient!.Topics.SendBatchAsync(broadcastKey, payloads, _config.DelaySeconds);
                 else
-                    await _pgmqClient!.Topics.SendBatchAsync(routingKey, payloads);
+                    await _pgmqClient!.Topics.SendBatchAsync(broadcastKey, payloads);
+                break;
+
+            case CommunicationMode.Streaming:
+                var queueName = PgMqNaming.StreamQueue();
+                if (_config!.DelaySeconds > 0)
+                    await _pgmqClient!.Send.SendBatchAsync(queueName, payloads, _config.DelaySeconds);
+                else
+                    await _pgmqClient!.Send.SendBatchAsync(queueName, payloads);
                 break;
         }
     }
 
     private void OnLingerTimerFired(object? state)
     {
-        // Timer callback — flush any pending messages
         _bufferSemaphore.Wait();
         try
         {
             if (_buffer.Count > 0)
-            {
                 FlushBufferAsync().GetAwaiter().GetResult();
-            }
         }
         catch (Exception ex)
         {

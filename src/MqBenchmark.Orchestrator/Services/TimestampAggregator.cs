@@ -12,6 +12,11 @@ public class TimestampAggregator
     private readonly ILogger<TimestampAggregator> _logger;
     private readonly ConcurrentDictionary<Guid, WorkerTimestampData> _workerTimestamps = new();
     
+    /// <summary>
+    /// Expected messages per consumer group. If null, all groups expect total sent count (PubSub/Streaming).
+    /// </summary>
+    private int[]? _expectedMessagesPerGroup;
+    
     public int WorkerCount => _workerTimestamps.Count;
 
     public TimestampAggregator(ILogger<TimestampAggregator> logger)
@@ -40,7 +45,17 @@ public class TimestampAggregator
     public void Reset()
     {
         _workerTimestamps.Clear();
+        _expectedMessagesPerGroup = null;
         _logger.LogInformation("Timestamp aggregator reset");
+    }
+    
+    /// <summary>
+    /// Sets expected message counts per consumer group for accurate "messages lost" calculation.
+    /// For PointToPoint mode, each group has its own quota. For PubSub/Streaming, pass null (all groups expect all messages).
+    /// </summary>
+    public void SetExpectedMessagesPerGroup(int[]? expectedPerGroup)
+    {
+        _expectedMessagesPerGroup = expectedPerGroup;
     }
     
     public BenchmarkResults ComputeResults()
@@ -77,8 +92,9 @@ public class TimestampAggregator
 
         // Compute per-group results
         var perGroupResults = new List<GroupResults>();
-        // Flat list of all consumer timestamps for CSV and duration calculation
-        var allConsumerTimestamps = new Dictionary<Guid, (long Ticks, Guid WorkerId, int GroupIndex)>();
+        // Flat list of all consumer timestamps for CSV and duration calculation.
+        // Uses a list (not dictionary) because the same MessageId can appear in multiple groups (PubSub/Streaming).
+        var allConsumerTimestamps = new List<(Guid MessageId, long Ticks, Guid WorkerId, int GroupIndex)>();
 
         foreach (var group in consumersByGroup)
         {
@@ -88,7 +104,7 @@ public class TimestampAggregator
 
             // Track for CSV
             foreach (var (t, workerId) in groupTimestamps)
-                allConsumerTimestamps.TryAdd(t.MessageId, (t.TimestampTicks, workerId, group.Key));
+                allConsumerTimestamps.Add((t.MessageId, t.TimestampTicks, workerId, group.Key));
 
             // Calculate latencies for this group
             var groupLatencies = new List<double>();
@@ -105,7 +121,7 @@ public class TimestampAggregator
             {
                 GroupIndex = group.Key,
                 TotalMessagesReceived = groupTimestamps.Count,
-                MessagesLost = producerTimestamps.Count - groupLatencies.Count,
+                MessagesLost = GetExpectedForGroup(group.Key, producerTimestamps.Count) - groupLatencies.Count,
                 AverageLatencyMs = sorted.Count > 0 ? sorted.Average() : 0,
                 MinLatencyMs = sorted.Count > 0 ? sorted.Min() : 0,
                 MaxLatencyMs = sorted.Count > 0 ? sorted.Max() : 0,
@@ -120,7 +136,7 @@ public class TimestampAggregator
         if (producerTimestamps.Count > 0 && allConsumerTimestamps.Count > 0)
         {
             var firstSendTicks = producerTimestamps.Values.Min();
-            var lastReceiveTicks = allConsumerTimestamps.Values.Max(x => x.Ticks);
+            var lastReceiveTicks = allConsumerTimestamps.Max(x => x.Ticks);
             totalDurationSeconds = (lastReceiveTicks - firstSendTicks) / (double)TimeSpan.TicksPerSecond;
         }
 
@@ -161,6 +177,13 @@ public class TimestampAggregator
         public int Key => key;
     }
 
+    private int GetExpectedForGroup(int groupIndex, int totalSent)
+    {
+        if (_expectedMessagesPerGroup != null && groupIndex < _expectedMessagesPerGroup.Length)
+            return _expectedMessagesPerGroup[groupIndex];
+        return totalSent;
+    }
+
     public string? GetResultsFilePath(string fileName)
     {
         // Prevent path traversal — only allow simple filenames
@@ -174,16 +197,24 @@ public class TimestampAggregator
     private void SaveResultsFile(
         string filePath,
         Dictionary<Guid, long> producerTimestamps,
-        Dictionary<Guid, (long Ticks, Guid WorkerId, int GroupIndex)> consumerTimestamps)
+        List<(Guid MessageId, long Ticks, Guid WorkerId, int GroupIndex)> consumerTimestamps)
     {
+        // Index consumer timestamps by MessageId for lookup, grouped by (MessageId, GroupIndex)
+        var consumerLookup = consumerTimestamps
+            .ToLookup(c => c.MessageId);
+
         var sb = new StringBuilder();
         sb.AppendLine("MessageId,SendTimestampTicks,ReceiveTimestampTicks,ConsumerId,ConsumerGroup");
 
         foreach (var (messageId, sendTicks) in producerTimestamps.OrderBy(kvp => kvp.Value))
         {
-            if (consumerTimestamps.TryGetValue(messageId, out var consumer))
+            var entries = consumerLookup[messageId];
+            if (entries.Any())
             {
-                sb.AppendLine($"{messageId},{sendTicks},{consumer.Ticks},{consumer.WorkerId},{consumer.GroupIndex}");
+                foreach (var entry in entries)
+                {
+                    sb.AppendLine($"{messageId},{sendTicks},{entry.Ticks},{entry.WorkerId},{entry.GroupIndex}");
+                }
             }
             else
             {

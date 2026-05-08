@@ -12,7 +12,6 @@ public class RabbitMqConsumer : IMqConsumer
     private string? _consumeQueueName;
     private string? _consumerTag;
     private CommunicationMode _communicationMode;
-    private bool _autoAck;
 
     public void Dispose()
     {
@@ -28,6 +27,7 @@ public class RabbitMqConsumer : IMqConsumer
     {
         var rabbitConfig = configuration.ToRabbitMqConfig();
         _communicationMode = configuration.CommunicationMode;
+        var groupName = configuration.ConsumerGroupName;
         
         var factory = new ConnectionFactory
         {
@@ -43,50 +43,16 @@ public class RabbitMqConsumer : IMqConsumer
         switch (_communicationMode)
         {
             case CommunicationMode.PointToPoint:
-                _consumeQueueName = rabbitConfig.QueueName;
-                _autoAck = false;
-                
-                await _channel.QueueDeclareAsync(
-                    queue: _consumeQueueName,
-                    durable: rabbitConfig.DurableMode,
-                    exclusive: false,
-                    autoDelete: rabbitConfig.QueueAutoDelete,
-                    arguments: null);
-                
-                await _channel.BasicQosAsync(
-                    prefetchSize: 0,
-                    prefetchCount: rabbitConfig.PrefetchCount,
-                    global: false);
-                break;
-
             case CommunicationMode.PubSub:
-                // Each consumer group gets its own queue bound to the fanout exchange
-                var exchangeName = string.IsNullOrEmpty(rabbitConfig.ExchangeName)
-                    ? $"{rabbitConfig.QueueName}_fanout"
-                    : rabbitConfig.ExchangeName;
-                _consumeQueueName = $"{rabbitConfig.QueueName}_group_{configuration.ConsumerGroupIndex}";
-                _autoAck = false;
+                // Both modes: consume from per-group queue (created by janitor)
+                _consumeQueueName = RabbitMqNaming.GroupQueue(groupName!);
                 
-                // Declare the fanout exchange (idempotent)
-                await _channel.ExchangeDeclareAsync(
-                    exchange: exchangeName,
-                    type: ExchangeType.Fanout,
-                    durable: rabbitConfig.DurableMode,
-                    autoDelete: false);
-                
-                // Declare per-group queue
                 await _channel.QueueDeclareAsync(
                     queue: _consumeQueueName,
                     durable: rabbitConfig.DurableMode,
                     exclusive: false,
-                    autoDelete: rabbitConfig.QueueAutoDelete,
+                    autoDelete: false,
                     arguments: null);
-                
-                // Bind to fanout exchange
-                await _channel.QueueBindAsync(
-                    queue: _consumeQueueName,
-                    exchange: exchangeName,
-                    routingKey: string.Empty);
                 
                 await _channel.BasicQosAsync(
                     prefetchSize: 0,
@@ -95,11 +61,9 @@ public class RabbitMqConsumer : IMqConsumer
                 break;
 
             case CommunicationMode.Streaming:
-                // Stream queues: all consumers read from the same stream queue with offsets
-                _consumeQueueName = rabbitConfig.QueueName;
-                _autoAck = false; // Streams require manual ack (auto-ack not supported by stream queues)
+                // All consumers read from the same stream queue
+                _consumeQueueName = RabbitMqNaming.StreamQueue();
                 
-                // Declare stream queue (idempotent)
                 var streamArgs = new Dictionary<string, object?>
                 {
                     ["x-queue-type"] = "stream"
@@ -111,7 +75,6 @@ public class RabbitMqConsumer : IMqConsumer
                     autoDelete: false,
                     arguments: streamArgs);
                 
-                // QoS is required for stream consumers
                 await _channel.BasicQosAsync(
                     prefetchSize: 0,
                     prefetchCount: rabbitConfig.PrefetchCount,
@@ -123,9 +86,7 @@ public class RabbitMqConsumer : IMqConsumer
     public async Task SubscribeAsync(Func<Message, Task> messageReceivedHandler)
     {
         if (_channel is null || _consumeQueueName is null)
-        {
             throw new InvalidOperationException("Consumer is not initialized.");
-        }
 
         var consumer = new AsyncEventingBasicConsumer(_channel);
         consumer.ReceivedAsync += async (sender, eventArgs) =>
@@ -134,23 +95,16 @@ public class RabbitMqConsumer : IMqConsumer
             try
             {
                 await messageReceivedHandler(message);
-
-                if (!_autoAck)
-                {
-                    await ((AsyncEventingBasicConsumer)sender).Channel.BasicAckAsync(eventArgs.DeliveryTag, false);
-                }
+                await ((AsyncEventingBasicConsumer)sender).Channel.BasicAckAsync(eventArgs.DeliveryTag, false);
             }
             catch
             {
-                if (!_autoAck)
-                {
-                    await ((AsyncEventingBasicConsumer)sender).Channel.BasicNackAsync(eventArgs.DeliveryTag, false, requeue: true);
-                }
+                await ((AsyncEventingBasicConsumer)sender).Channel.BasicNackAsync(eventArgs.DeliveryTag, false, requeue: true);
                 Console.WriteLine($"Message {message.Id} processing failed.");
             }
         };
 
-        // For streaming, start reading from the beginning of the stream
+        // For streaming, start reading from the beginning
         var consumeArgs = new Dictionary<string, object?>();
         if (_communicationMode == CommunicationMode.Streaming)
         {
@@ -159,7 +113,7 @@ public class RabbitMqConsumer : IMqConsumer
 
         _consumerTag = await _channel.BasicConsumeAsync(
             queue: _consumeQueueName,
-            autoAck: _autoAck,
+            autoAck: false,
             consumerTag: string.Empty,
             noLocal: false,
             exclusive: false,

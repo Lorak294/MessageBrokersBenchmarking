@@ -12,10 +12,7 @@ public static class MqConfigRabbitMqExtensions
             Port = int.Parse(configuration.GetRequiredSetting("Port")),
             Username = configuration.GetRequiredSetting("Username"),
             Password = configuration.GetRequiredSetting("Password"),
-            QueueName = configuration.GetRequiredSetting("QueueName"),
-            ExchangeName = configuration.GetOptionalSetting("ExchangeName", ""),
             DurableMode = bool.Parse(configuration.GetOptionalSetting("DurableMode", "false")),
-            QueueAutoDelete = bool.Parse(configuration.GetOptionalSetting("QueueAutodelete", "false")),
             PrefetchCount = ushort.Parse(configuration.GetOptionalSetting("PrefetchCount", "100")),
             ConsumerDispatchConcurrency = ushort.Parse(configuration.GetOptionalSetting("ConsumerDispatchConcurrency", "1")),
             PublisherConfirms = bool.Parse(configuration.GetOptionalSetting("PublisherConfirms", "false"))
@@ -29,30 +26,41 @@ public record RabbitMqConfig
     public required int Port { get; init; }
     public required string Username { get; init; }
     public required string Password { get; init; }
-    public required string QueueName { get; init; }
-    /// <summary>
-    /// Exchange name used for PubSub mode (fanout exchange).
-    /// Empty string means default exchange (PointToPoint).
-    /// </summary>
-    public string ExchangeName { get; init; } = "";
-    public required bool DurableMode { get; init; } = false;
-    public required bool QueueAutoDelete { get; init; } = false;
+    public required bool DurableMode { get; init; }
+    
     /// <summary>
     /// Number of messages the broker sends to the consumer before waiting for acks.
     /// Higher values improve throughput; lower values give fairer dispatch across consumers.
-    /// Default: 100.
     /// </summary>
     public ushort PrefetchCount { get; init; } = 100;
+    
     /// <summary>
     /// Number of concurrent message handlers dispatched by the client.
-    /// Default: 1 (sequential processing).
     /// </summary>
     public ushort ConsumerDispatchConcurrency { get; init; } = 1;
+    
     /// <summary>
-    /// When true, enables publisher confirms on the channel. The producer will wait for
-    /// broker acknowledgment after each publish, ensuring the message has been persisted.
-    /// This gives accurate durable latency measurements but reduces throughput.
-    /// Default: false.
+    /// When true, enables publisher confirms on the channel.
     /// </summary>
     public bool PublisherConfirms { get; init; } = false;
+}
+
+/// <summary>
+/// Auto-generated resource naming conventions for RabbitMQ.
+/// </summary>
+public static class RabbitMqNaming
+{
+    private const string Base = "benchmark";
+    
+    /// <summary>Queue name for a specific consumer group (used in PointToPoint and PubSub).</summary>
+    public static string GroupQueue(string groupName) => $"{Base}_{groupName}";
+    
+    /// <summary>Topic exchange name (used in PointToPoint for routed delivery).</summary>
+    public static string TopicExchange() => $"{Base}_topic";
+    
+    /// <summary>Fanout exchange name (used in PubSub).</summary>
+    public static string FanoutExchange() => $"{Base}_fanout";
+    
+    /// <summary>Stream queue name (used in Streaming).</summary>
+    public static string StreamQueue() => $"{Base}_stream";
 }

@@ -10,8 +10,6 @@ public static class MqConfigKafkaExtensions
         return new KafkaConfig
         {
             BootstrapServers = configuration.GetRequiredSetting("BootstrapServers"),
-            TopicName = configuration.GetRequiredSetting("TopicName"),
-            GroupId = configuration.GetRequiredSetting("GroupId"),
             Acks = Enum.Parse<Acks>(configuration.GetOptionalSetting("Acks", "Leader"), ignoreCase: true),
             LingerMs = int.Parse(configuration.GetOptionalSetting("LingerMs", "5")),
             BatchSize = int.Parse(configuration.GetOptionalSetting("BatchSize", "65536")),
@@ -27,61 +25,54 @@ public static class MqConfigKafkaExtensions
 public class KafkaConfig
 {
     public required string BootstrapServers { get; init; }
-    public required string TopicName { get; init; }
-    public required string GroupId { get; init; }
     
-    /// <summary>
-    /// Broker acknowledgment level for produced messages.
-    /// None = no ack, Leader = leader ack only, All = all replicas must ack.
-    /// Default: Leader.
-    /// </summary>
+    /// <summary>Broker acknowledgment level. Default: Leader.</summary>
     public Acks Acks { get; init; } = Acks.Leader;
     
-    /// <summary>
-    /// Milliseconds to buffer messages before sending a batch.
-    /// Higher values improve throughput at the cost of latency.
-    /// Default: 5.
-    /// </summary>
+    /// <summary>Milliseconds to buffer messages before sending. Default: 5.</summary>
     public int LingerMs { get; init; } = 5;
     
-    /// <summary>
-    /// Maximum batch size in bytes.
-    /// Default: 65536 (64 KB).
-    /// </summary>
+    /// <summary>Maximum batch size in bytes. Default: 65536.</summary>
     public int BatchSize { get; init; } = 65536;
     
-    /// <summary>
-    /// Enable idempotent producer to ensure exactly-once delivery.
-    /// Requires Acks.All.
-    /// Default: false.
-    /// </summary>
+    /// <summary>Enable idempotent producer (requires Acks.All). Default: false.</summary>
     public bool EnableIdempotence { get; init; } = false;
     
-    /// <summary>
-    /// Where the consumer starts reading when no committed offset exists.
-    /// Earliest = from the beginning, Latest = only new messages.
-    /// Default: Earliest.
-    /// </summary>
+    /// <summary>Where consumer starts when no committed offset exists. Default: Earliest.</summary>
     public AutoOffsetReset AutoOffsetReset { get; init; } = AutoOffsetReset.Earliest;
     
-    /// <summary>
-    /// Whether the consumer automatically commits offsets.
-    /// Default: true.
-    /// </summary>
+    /// <summary>Whether consumer automatically commits offsets. Default: true.</summary>
     public bool EnableAutoCommit { get; init; } = true;
     
     /// <summary>
-    /// If true, uses Produce() (fire-and-forget into internal buffer) for higher throughput.
-    /// If false, uses await ProduceAsync() which waits for broker acknowledgment per message.
-    /// Buffered messages are guaranteed to be delivered via Flush() on dispose.
-    /// Default: true.
+    /// If true, uses Produce() (fire-and-forget into buffer) for higher throughput.
+    /// If false, uses await ProduceAsync(). Default: true.
     /// </summary>
     public bool UseBufferedProducer { get; init; } = true;
     
     /// <summary>
-    /// Number of partitions to create for the topic.
-    /// For PointToPoint mode, set this >= max consumers in any group to ensure all consumers are active.
+    /// Number of partitions per topic. For PointToPoint, set >= max consumers in a group.
     /// Default: 1.
     /// </summary>
     public int NumPartitions { get; init; } = 1;
+}
+
+/// <summary>
+/// Auto-generated resource naming conventions for Kafka.
+/// </summary>
+public static class KafkaNaming
+{
+    private const string Base = "benchmark";
+    
+    /// <summary>Topic name for a specific consumer group (PointToPoint mode).</summary>
+    public static string GroupTopic(string groupName) => $"{Base}_{groupName}";
+    
+    /// <summary>Shared topic name (PubSub and Streaming modes).</summary>
+    public static string SharedTopic() => Base;
+    
+    /// <summary>Consumer group ID for a specific group.</summary>
+    public static string GroupId(string groupName) => $"{Base}_{groupName}";
+    
+    /// <summary>Shared consumer group ID (PointToPoint — competing consumers on same group topic).</summary>
+    public static string SharedGroupId(string groupName) => $"{Base}_{groupName}";
 }

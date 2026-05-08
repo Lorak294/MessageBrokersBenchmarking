@@ -11,7 +11,6 @@ public class RabbitMqProducer : IMqProducer
     private RabbitMqConfig? _rabbitConfig;
     private CommunicationMode _communicationMode;
     private string _publishExchange = string.Empty;
-    private string _publishRoutingKey = string.Empty;
 
     public void Dispose()
     {
@@ -42,67 +41,67 @@ public class RabbitMqProducer : IMqProducer
         switch (_communicationMode)
         {
             case CommunicationMode.PointToPoint:
-                // Publish to default exchange with queue name as routing key
-                await _channel.QueueDeclareAsync(
-                    queue: _rabbitConfig.QueueName,
+                // Topic exchange — routing keys target specific group queues
+                _publishExchange = RabbitMqNaming.TopicExchange();
+                await _channel.ExchangeDeclareAsync(
+                    exchange: _publishExchange,
+                    type: ExchangeType.Topic,
                     durable: _rabbitConfig.DurableMode,
-                    exclusive: false,
-                    autoDelete: _rabbitConfig.QueueAutoDelete,
-                    arguments: null);
-                _publishExchange = string.Empty;
-                _publishRoutingKey = _rabbitConfig.QueueName;
+                    autoDelete: false);
                 break;
 
             case CommunicationMode.PubSub:
-                // Declare fanout exchange; consumers will bind their own queues
-                var exchangeName = string.IsNullOrEmpty(_rabbitConfig.ExchangeName)
-                    ? $"{_rabbitConfig.QueueName}_fanout"
-                    : _rabbitConfig.ExchangeName;
+                // Fanout exchange — all messages go to all bound queues
+                _publishExchange = RabbitMqNaming.FanoutExchange();
                 await _channel.ExchangeDeclareAsync(
-                    exchange: exchangeName,
+                    exchange: _publishExchange,
                     type: ExchangeType.Fanout,
                     durable: _rabbitConfig.DurableMode,
                     autoDelete: false);
-                _publishExchange = exchangeName;
-                _publishRoutingKey = string.Empty; // Fanout ignores routing key
                 break;
 
             case CommunicationMode.Streaming:
-                // Declare a stream queue (x-queue-type: stream)
+                // Publish directly to stream queue via default exchange
+                var streamQueue = RabbitMqNaming.StreamQueue();
                 var streamArgs = new Dictionary<string, object?>
                 {
                     ["x-queue-type"] = "stream"
                 };
                 await _channel.QueueDeclareAsync(
-                    queue: _rabbitConfig.QueueName,
-                    durable: true, // Streams are always durable
+                    queue: streamQueue,
+                    durable: true,
                     exclusive: false,
-                    autoDelete: false, // Streams cannot auto-delete
+                    autoDelete: false,
                     arguments: streamArgs);
-                _publishExchange = string.Empty;
-                _publishRoutingKey = _rabbitConfig.QueueName;
+                _publishExchange = string.Empty; // default exchange
                 break;
         }
     }
 
-    public async Task SendAsync(Message message)
+    public async Task SendAsync(Message message, string? routingTarget = null)
     {
-        if (_channel is null)
-        {
+        if (_channel is null || _rabbitConfig is null)
             throw new InvalidOperationException("Producer is not initialized.");
-        }
 
         var properties = new BasicProperties
         {
-            DeliveryMode = _rabbitConfig!.DurableMode || _communicationMode == CommunicationMode.Streaming
+            DeliveryMode = _rabbitConfig.DurableMode || _communicationMode == CommunicationMode.Streaming
                 ? DeliveryModes.Persistent
                 : DeliveryModes.Transient
         };
-        
+
+        var routingKey = _communicationMode switch
+        {
+            CommunicationMode.PointToPoint => routingTarget ?? throw new InvalidOperationException("PointToPoint requires a routing target."),
+            CommunicationMode.PubSub => string.Empty, // Fanout ignores routing key
+            CommunicationMode.Streaming => RabbitMqNaming.StreamQueue(), // Default exchange uses queue name as routing key
+            _ => string.Empty
+        };
+
         await _channel.BasicPublishAsync(
             exchange: _publishExchange,
-            routingKey: _publishRoutingKey,
-            mandatory: _communicationMode == CommunicationMode.PointToPoint,
+            routingKey: routingKey,
+            mandatory: false,
             basicProperties: properties,
             body: message.Payload);
     }
