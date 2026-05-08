@@ -102,14 +102,17 @@ public class TestScheduler(
         var producerWorkers = allWorkers.Take(request.ProducersCount).ToList();
         for (int p = 0; p < producerWorkers.Count; p++)
         {
-            var producerMessageCount = messagesPerProducer + (p < producerRemainder ? 1 : 0);
-            
             // Split routing plan proportionally across producers
             RoutingPlan? producerRoutingPlan = null;
             if (routingPlan != null)
             {
                 producerRoutingPlan = SplitRoutingPlan(routingPlan, request.ProducersCount, p);
             }
+            
+            // For PointToPoint, derive message count from routing plan to avoid mismatch
+            var producerMessageCount = producerRoutingPlan != null
+                ? producerRoutingPlan.Targets.Sum(t => t.MessageCount)
+                : messagesPerProducer + (p < producerRemainder ? 1 : 0);
             
             await hubContext.Clients.Client(producerWorkers[p].ConnectionId).SendAsync(
                 OrchestratorMethods.InitializeTest, new WorkerConfig

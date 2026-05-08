@@ -19,6 +19,9 @@ COLOR_MAP = {
     "RabbitMq": "#F28C28",
     "Pgmq": "#3B7DD8",
     "Kafka": "#4CAF50",
+    "ClientPoll": "#3B7DD8",
+    "ListenNotify": "#7B1FA2",
+    "ServerPoll": "#00897B",
 }
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
@@ -28,6 +31,15 @@ def load_config():
     config_path = os.path.join(SCRIPT_DIR, "config.json")
     with open(config_path) as f:
         return json.load(f)
+
+
+def find_csv(directory):
+    """Find CSV file in directory, handling inconsistent naming."""
+    for name in ("results.csv", "result.csv"):
+        path = os.path.join(directory, name)
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def load_results(csv_path):
@@ -63,7 +75,37 @@ def compute_metrics(df, message_size_bytes):
 
 
 def discover_groups(results_dir):
-    """Discover column groups and their columns (MQ systems)."""
+    """Discover column groups and their columns (MQ systems).
+
+    Supports two layouts:
+    - Flat: testConfig.json at results_dir root, subdirs are columns
+    - Nested: subdirs each have their own testConfig.json with column subdirs
+    """
+    # Flat structure: testConfig.json at root level
+    root_config = os.path.join(results_dir, "testConfig.json")
+    if os.path.exists(root_config):
+        with open(root_config) as f:
+            test_config = json.load(f)
+        message_size = int(test_config["testConfig"]["messageSizeInBytes"])
+        columns = []
+        for col_name in sorted(os.listdir(results_dir)):
+            col_path = os.path.join(results_dir, col_name)
+            if not os.path.isdir(col_path):
+                continue
+            csv_path = find_csv(col_path)
+            if csv_path:
+                columns.append({"name": col_name, "csv_path": csv_path})
+        return [
+            {
+                "name": os.path.basename(results_dir),
+                "title": test_config.get("title", os.path.basename(results_dir)),
+                "message_size_bytes": message_size,
+                "test_config": test_config["testConfig"],
+                "columns": columns,
+            }
+        ]
+
+    # Nested structure
     groups = []
     for group_name in sorted(os.listdir(results_dir)):
         group_path = os.path.join(results_dir, group_name)
@@ -84,8 +126,8 @@ def discover_groups(results_dir):
             col_path = os.path.join(group_path, col_name)
             if not os.path.isdir(col_path):
                 continue
-            csv_path = os.path.join(col_path, "results.csv")
-            if os.path.exists(csv_path):
+            csv_path = find_csv(col_path)
+            if csv_path:
                 columns.append({"name": col_name, "csv_path": csv_path})
 
         groups.append(
@@ -384,6 +426,239 @@ def run_latency(mode_config, output_dir):
         print()
 
 
+# ── Messaging modes ────────────────────────────────────────────────────────────
+
+SHADE_MAP = {
+    "Kafka": ["#A5D6A7", "#4CAF50", "#2E7D32"],  # light/mid/dark green
+    "Pgmq": ["#90CAF9", "#3B7DD8", "#1565C0"],  # light/mid/dark blue
+    "RabbitMq": ["#FFCC80", "#F28C28", "#E65100"],  # light/mid/dark orange
+}
+
+MESSAGING_METRIC_LABELS = [
+    ("messages", "Messages"),
+    ("avg_latency_ms", "Avg Latency (ms)"),
+    ("median_latency_ms", "Median Latency (ms)"),
+    ("min_latency_ms", "Min Latency (ms)"),
+    ("max_latency_ms", "Max Latency (ms)"),
+    ("p50_ms", "P50 (ms)"),
+    ("p95_ms", "P95 (ms)"),
+    ("p99_ms", "P99 (ms)"),
+]
+
+
+def discover_messaging_groups(results_dir):
+    """Discover messaging mode groups and their brokers."""
+    groups = []
+    for mode_name in sorted(os.listdir(results_dir)):
+        mode_path = os.path.join(results_dir, mode_name)
+        if not os.path.isdir(mode_path):
+            continue
+
+        test_config_path = os.path.join(mode_path, "testConfig.json")
+        if not os.path.exists(test_config_path):
+            continue
+
+        with open(test_config_path) as f:
+            test_config = json.load(f)
+
+        message_size = int(test_config["testConfig"]["messageSizeInBytes"])
+
+        brokers = []
+        for broker_name in sorted(os.listdir(mode_path)):
+            broker_path = os.path.join(mode_path, broker_name)
+            if not os.path.isdir(broker_path):
+                continue
+            csv_path = find_csv(broker_path)
+            if csv_path:
+                brokers.append({"name": broker_name, "csv_path": csv_path})
+
+        groups.append(
+            {
+                "name": mode_name,
+                "title": test_config.get("title", mode_name),
+                "message_size_bytes": message_size,
+                "test_config": test_config["testConfig"],
+                "brokers": brokers,
+            }
+        )
+
+    return groups
+
+
+def load_messaging_data(group):
+    """Load CSV for each broker and split by ConsumerGroup.
+
+    Returns dict: {broker_name: {group_id: DataFrame}}
+    All expected groups (0, 1, 2) are included even if empty.
+    """
+    data = {}
+    for broker in group["brokers"]:
+        df = load_results(broker["csv_path"])
+        by_group = {}
+        for gid in range(3):
+            sub = df[df["ConsumerGroup"] == gid].reset_index(drop=True)
+            by_group[gid] = sub
+        data[broker["name"]] = by_group
+    return data
+
+
+def plot_messaging_latency_over_time(data, mode_name, title, output_dir):
+    plt.figure(figsize=(14, 6))
+    for broker_name, groups_data in data.items():
+        shades = SHADE_MAP.get(broker_name, ["#888", "#555", "#333"])
+        for gid, df in sorted(groups_data.items()):
+            if len(df) == 0:
+                continue
+            smoothed = df["LatencyMs"].rolling(window=500, min_periods=1).mean()
+            plt.plot(
+                df.index,
+                smoothed,
+                label=f"{broker_name} (Group {gid})",
+                alpha=0.7,
+                linewidth=1.2,
+                color=shades[gid % len(shades)],
+            )
+    plt.xlabel("Message Index (ordered by send time)")
+    plt.yscale("log")
+    plt.ylabel("Latency (ms, log scale)")
+    plt.title(f"{title} - Latency Over Time")
+    plt.legend(fontsize=8)
+    plt.tight_layout()
+    path = os.path.join(output_dir, f"{mode_name}_messaging_latency_over_time.png")
+    plt.savefig(path, dpi=150)
+    print(f"Saved: {path}")
+    plt.show()
+
+
+def plot_messaging_latency_distribution(data, mode_name, title, output_dir):
+    plt.figure(figsize=(14, 6))
+    for broker_name, groups_data in data.items():
+        shades = SHADE_MAP.get(broker_name, ["#888", "#555", "#333"])
+        for gid, df in sorted(groups_data.items()):
+            if len(df) == 0:
+                continue
+            latency = df["LatencyMs"].values
+            kde = gaussian_kde(latency)
+            x_min = max(latency.min(), 1e-3)
+            x = np.logspace(np.log10(x_min), np.log10(latency.max()), 500)
+            plt.plot(
+                x,
+                kde(x),
+                label=f"{broker_name} (Group {gid})",
+                linewidth=2,
+                color=shades[gid % len(shades)],
+            )
+    plt.xscale("log")
+    plt.xlabel("Latency (ms, log scale)")
+    plt.ylabel("Density")
+    plt.title(f"{title} - Latency Distribution")
+    plt.legend(fontsize=8)
+    plt.tight_layout()
+    path = os.path.join(output_dir, f"{mode_name}_messaging_latency_distribution.png")
+    plt.savefig(path, dpi=150)
+    print(f"Saved: {path}")
+    plt.show()
+
+
+def save_messaging_table(data, group, output_dir):
+    """Save comparison table with per-group metrics and fairness diff columns."""
+    mode_name = group["name"]
+    message_size = group["message_size_bytes"]
+    all_lines = []
+
+    for broker_name, groups_data in data.items():
+        all_lines.append(f"\n--- {broker_name} ---")
+
+        # Compute metrics per consumer group
+        group_ids = sorted(groups_data.keys())
+        group_metrics = {}
+        for gid in group_ids:
+            df = groups_data[gid]
+            if len(df) == 0:
+                group_metrics[gid] = None
+            else:
+                group_metrics[gid] = compute_metrics(df, message_size)
+
+        col_names = [f"Group {gid}" for gid in group_ids] + ["Max Diff", "Max Diff %"]
+        label_w = max(len(ml[1]) for ml in MESSAGING_METRIC_LABELS) + 2
+        col_w = max(max(len(c) for c in col_names), 12) + 2
+
+        header = f"{'Metric':<{label_w}}" + "".join(f"{c:>{col_w}}" for c in col_names)
+        all_lines.append(header)
+        all_lines.append("-" * len(header))
+
+        for key, label in MESSAGING_METRIC_LABELS:
+            row = f"{label:<{label_w}}"
+            values = []
+            for gid in group_ids:
+                m = group_metrics[gid]
+                if m is None:
+                    row += f"{0 if key == 'messages' else 'N/A':>{col_w}}"
+                else:
+                    row += f"{m[key]:>{col_w}}"
+                    values.append(m[key])
+
+            # Compute diff
+            if len(values) >= 2 and key != "messages":
+                max_val = max(values)
+                min_val = min(values)
+                diff = round(max_val - min_val, 4)
+                if min_val != 0:
+                    diff_pct = f"{round((max_val - min_val) / min_val * 100, 2)}%"
+                else:
+                    diff_pct = "N/A"
+                row += f"{diff:>{col_w}}"
+                row += f"{diff_pct:>{col_w}}"
+            elif key == "messages" and len(values) >= 2:
+                max_val = max(values)
+                min_val = min(values)
+                diff = max_val - min_val
+                if min_val != 0:
+                    diff_pct = f"{round((max_val - min_val) / min_val * 100, 2)}%"
+                else:
+                    diff_pct = "N/A"
+                row += f"{diff:>{col_w}}"
+                row += f"{diff_pct:>{col_w}}"
+            else:
+                row += f"{'N/A':>{col_w}}" * 2
+
+            all_lines.append(row)
+
+    output = "\n".join(all_lines) + "\n"
+    print(output)
+
+    path = os.path.join(output_dir, f"{mode_name}_messaging_comparison_table.txt")
+    with open(path, "w") as f:
+        f.write(output)
+    print(f"Saved: {path}")
+
+
+def run_messaging_modes(mode_config, output_dir):
+    title = mode_config["title"]
+    results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
+
+    print(f"=== {title} ===\n")
+
+    groups = discover_messaging_groups(results_dir)
+
+    for g in groups:
+        tc = g["test_config"]
+        print(f"--- {g['name']} ({g['title']}) ---")
+        print(
+            f"Message size: {g['message_size_bytes']} B | "
+            f"Count: {tc['messageCount']} | "
+            f"Producers: {tc['producersCount']} | "
+            f"Consumers: {tc['consumersCount']}\n"
+        )
+
+        data = load_messaging_data(g)
+
+        save_messaging_table(data, g, output_dir)
+        plot_messaging_latency_over_time(data, g["name"], g["title"], output_dir)
+        plot_messaging_latency_distribution(data, g["name"], g["title"], output_dir)
+        print()
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 
@@ -391,9 +666,9 @@ def main():
     parser = argparse.ArgumentParser(description="Message Queue Benchmark Analysis")
     parser.add_argument(
         "--mode",
-        choices=["throughput", "latency", "all"],
+        choices=["throughput", "latency", "messaging-modes", "pgmq-modes", "all"],
         default="all",
-        help="Analysis mode: throughput, latency, or all (default: all)",
+        help="Analysis mode: throughput, latency, messaging-modes, pgmq-modes, or all (default: all)",
     )
     args = parser.parse_args()
 
@@ -406,6 +681,12 @@ def main():
 
     if args.mode in ("latency", "all"):
         run_latency(config["latency"], output_dir)
+
+    if args.mode in ("messaging-modes", "all"):
+        run_messaging_modes(config["messaging-modes"], output_dir)
+
+    if args.mode in ("pgmq-modes", "all"):
+        run_latency(config["pgmq-modes"], output_dir)
 
 
 if __name__ == "__main__":

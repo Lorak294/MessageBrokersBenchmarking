@@ -62,7 +62,14 @@ public class PgMqConsumer : IMqConsumer
         if (_communicationMode != CommunicationMode.Streaming
             && _config.ConsumerMode == PgMqConfig.ConsumerModeEnum.ListenNotify)
         {
-            await _pgmqClient.Notify.EnableAsync(_consumeQueueName!, _config.NotifyThrottleMs);
+            try
+            {
+                await _pgmqClient.Notify.EnableAsync(_consumeQueueName!, _config.NotifyThrottleMs);
+            }
+            catch (Npgsql.PostgresException ex) when (ex.SqlState == MqBenchmark.PgMq.Client.Operations.ErrorCodes.TriggerAlreadyExistsSqlState)
+            {
+                Console.WriteLine($"LISTEN/NOTIFY trigger already exists on {_consumeQueueName} (created by another consumer in this group), skipping.");
+            }
             _notifyListener = _pgmqClient.Notify.CreateListener(_consumeQueueName!);
             await _notifyListener.StartAsync();
         }
@@ -233,6 +240,8 @@ public class PgMqConsumer : IMqConsumer
     private async Task RunListenNotifyLoop(Func<Message, Task> handler, CancellationToken ct)
     {
         var fallbackInterval = TimeSpan.FromSeconds(Math.Max(_config!.MaxPollSeconds, 1));
+        var usePopStrategy = _config.UsePop && _config.MessageReadMode == PgMqConfig.ReadModeEnum.Delete;
+        var batchSize = _config.ConsumerBatchSize;
 
         while (!ct.IsCancellationRequested)
         {
@@ -240,17 +249,41 @@ public class PgMqConsumer : IMqConsumer
             {
                 await _notifyListener!.WaitAsync(fallbackInterval, ct);
 
-                bool gotMessage;
+                // Drain all available messages after notification
+                bool gotMessages;
                 do
                 {
-                    var messages = await _pgmqClient!.Pop.PopAsync(_consumeQueueName!, qty: 1, ct: ct);
-                    gotMessage = messages.Count > 0;
-                    if (gotMessage)
+                    if (usePopStrategy)
                     {
-                        var message = Message.FromBytes(messages[0].Payload);
-                        await handler(message);
+                        var messages = await _pgmqClient!.Pop.PopAsync(_consumeQueueName!, qty: batchSize, ct: ct);
+                        gotMessages = messages.Count > 0;
+                        foreach (var pgmqMsg in messages)
+                        {
+                            var message = Message.FromBytes(pgmqMsg.Payload);
+                            await handler(message);
+                        }
                     }
-                } while (gotMessage && !ct.IsCancellationRequested);
+                    else
+                    {
+                        var messages = await _pgmqClient!.Read.ReadAsync(
+                            _consumeQueueName!, _config.VisibilityTimeout, qty: batchSize, ct: ct);
+                        gotMessages = messages.Count > 0;
+                        if (gotMessages)
+                        {
+                            var msgIds = new long[messages.Count];
+                            for (int i = 0; i < messages.Count; i++)
+                            {
+                                var message = Message.FromBytes(messages[i].Payload);
+                                await handler(message);
+                                msgIds[i] = messages[i].MsgId;
+                            }
+                            if (_config.MessageReadMode == PgMqConfig.ReadModeEnum.Archive)
+                                await _pgmqClient!.Archive.ArchiveBatchAsync(_consumeQueueName!, msgIds, ct);
+                            else
+                                await _pgmqClient!.Delete.DeleteBatchAsync(_consumeQueueName!, msgIds, ct);
+                        }
+                    }
+                } while (gotMessages && !ct.IsCancellationRequested);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)

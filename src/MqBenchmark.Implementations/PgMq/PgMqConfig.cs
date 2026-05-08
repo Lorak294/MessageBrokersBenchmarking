@@ -45,8 +45,8 @@ public record PgMqConfig
     /// <summary>Maximum seconds to block in server-side polling. Default: 5.</summary>
     public int MaxPollSeconds { get; init; } = 5;
 
-    /// <summary>Throttle interval in ms for LISTEN/NOTIFY notifications. Default: 250ms.</summary>
-    public int NotifyThrottleMs { get; init; } = 250;
+    /// <summary>Throttle interval in ms for LISTEN/NOTIFY notifications. Default: 10ms.</summary>
+    public int NotifyThrottleMs { get; init; } = 10;
 
     /// <summary>Delay in seconds before messages become visible. Default: 0.</summary>
     public int DelaySeconds { get; init; } = 0;

@@ -7,5 +7,13 @@
   "latency": {
     "title": "Latency Comparison",
     "resultsSetsDir": "result-sets/latency"
+  },
+  "messaging-modes": {
+    "title": "Messaging Modes Comparison",
+    "resultsSetsDir": "result-sets/messaging-modes"
+  },
+  "pgmq-modes": {
+    "title": "PGMQ Messaging Modes Latency",
+    "resultsSetsDir": "result-sets/pgmq-modes"
   }
 }

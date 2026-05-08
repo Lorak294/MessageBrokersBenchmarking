@@ -1,0 +1,18 @@
+{
+  "producersCount": 1,
+  "consumerGroups": [1,1,1],
+  "communicationMode": "PointToPoint",
+  "messagesPerConsumerGroup": [10000,20000,0],
+  "messageSizeInBytes": 1024,
+  "sendFrequencyMps": 1000,
+  "consumerIdleTimeoutSeconds": 40,
+  "mqConfig": {
+    "implementation": "RabbitMQ",
+    "additionalSettings": {
+      "Hostname": "rabbitmq",
+      "Port": "5672",
+      "Username": "guest",
+      "Password": "guest"
+    }
+  }
+}
