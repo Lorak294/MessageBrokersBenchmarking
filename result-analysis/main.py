@@ -19,7 +19,7 @@ COLOR_MAP = {
     "RabbitMq": "#F28C28",
     "Pgmq": "#3B7DD8",
     "Kafka": "#4CAF50",
-    "ClientPoll": "#3B7DD8",
+    "ClientPoll": "#E53935",
     "ListenNotify": "#7B1FA2",
     "ServerPoll": "#00897B",
 }
@@ -338,12 +338,15 @@ LATENCY_METRIC_LABELS = [
 ]
 
 
-def plot_latency_over_time(datasets, group_name, title, output_dir):
+def plot_latency_over_time(datasets, group_name, title, output_dir, warmup_skip=100):
     plt.figure(figsize=(14, 6))
     for name, df in datasets.items():
         color = COLOR_MAP.get(name, "gray")
         smoothed = df["LatencyMs"].rolling(window=500, min_periods=1).mean()
-        plt.plot(df.index, smoothed, label=name, alpha=0.7, linewidth=1.2, color=color)
+        smoothed = smoothed.iloc[warmup_skip:]
+        plt.plot(
+            smoothed.index, smoothed, label=name, alpha=0.7, linewidth=1.2, color=color
+        )
     plt.xlabel("Message Index (ordered by send time)")
     plt.ylabel("Latency (ms)")
     plt.title(f"{title} - Latency Over Time")
@@ -360,10 +363,11 @@ def plot_latency_distribution(datasets, group_name, title, output_dir):
     for name, df in datasets.items():
         color = COLOR_MAP.get(name, "gray")
         latency = df["LatencyMs"].values
-        kde = gaussian_kde(latency)
-        x_min = max(latency.min(), 1e-3)
-        x = np.logspace(np.log10(x_min), np.log10(latency.max()), 500)
-        plt.plot(x, kde(x), label=name, linewidth=2, color=color)
+        log_latency = np.log10(np.maximum(latency, 1e-3))
+        kde = gaussian_kde(log_latency)
+        x_log = np.linspace(log_latency.min(), log_latency.max(), 500)
+        x = 10**x_log
+        plt.plot(x, kde(x_log), label=name, linewidth=2, color=color)
     plt.xscale("log")
     plt.xlabel("Latency (ms, log scale)")
     plt.ylabel("Density")
