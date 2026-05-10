@@ -13,10 +13,10 @@
       "TopicName": "benchmark_throughput",
       "GroupId": "benchmark_group",
       "NumPartitions": "1",
-      "Acks": "All",
+      "Acks": "None",
       "EnableIdempotence": "false",
-      "LingerMs": "5",
-      "BatchSize": "1024",
+      "LingerMs": "1",
+      "BatchSize": "102400",
       "UseBufferedProducer": "true",
       "AutoOffsetReset": "Earliest",
       "EnableAutoCommit": "true"

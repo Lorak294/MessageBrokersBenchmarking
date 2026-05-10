@@ -461,12 +461,13 @@ def plot_latency_percentile_bars(groups, all_metrics, output_dir, title):
                         fontsize=10,
                     )
 
-        ax.set_xlabel("Częstotliwość wysylki wiadomości")
+        ax.set_xlabel("Przepustowość docelowa")
         ax.set_ylabel("Opóźnienie (ms)")
         ax.set_title(f"{title} - {percentile_label}")
         ax.set_xticks(x)
         ax.set_xticklabels(group_labels)
         ax.legend()
+        ax.set_ylim(top=ax.get_ylim()[1] * 1.25)
         plt.tight_layout()
         path = os.path.join(output_dir, filename)
         plt.savefig(path, dpi=150)
