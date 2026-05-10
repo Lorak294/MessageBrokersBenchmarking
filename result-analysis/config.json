@@ -1,19 +1,19 @@
 {
   "outputPath": "output",
   "throughput": {
-    "title": "Throughput Comparison by Message Size",
-    "resultsSetsDir": "result-sets/throughput"
+    "title": "Porównanie przepustowości wg rozmiaru wiadomości",
+    "resultsSetsDir": "result-sets/throughput-optimal"
   },
   "latency": {
-    "title": "Latency Comparison",
+    "title": "Porównanie opóźnień",
     "resultsSetsDir": "result-sets/latency"
   },
   "messaging-modes": {
-    "title": "Messaging Modes Comparison",
+    "title": "Porównanie trybów komunikacji",
     "resultsSetsDir": "result-sets/messaging-modes"
   },
   "pgmq-modes": {
-    "title": "PGMQ Messaging Modes Latency",
+    "title": "Opóźnienia trybów komunikacji PGMQ",
     "resultsSetsDir": "result-sets/pgmq-modes"
   }
 }

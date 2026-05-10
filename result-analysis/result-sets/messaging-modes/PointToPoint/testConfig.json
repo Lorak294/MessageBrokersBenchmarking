@@ -1,5 +1,5 @@
 {
-  "title": "Messaging Modes - Point to Point",
+  "title": "Tryby komunikacji - Point to Point",
   "testConfig": {
     "messageSizeInBytes": "1024",
     "messageCount": "30000",

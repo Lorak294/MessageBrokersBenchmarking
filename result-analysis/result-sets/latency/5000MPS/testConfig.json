@@ -1,5 +1,5 @@
 {
-  "title": "Throughput Comparison - 5000MPS (5MB/s) 1p-1k",
+  "title": "Porównanie opóźnień - 5000 wiad./s (5MB/s) 1p-1k",
   "testConfig": {
     "messageSizeInBytes": "1024", 
     "messageCount": "100000",

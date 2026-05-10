@@ -1,5 +1,5 @@
 {
-  "title": "Throughput Comparison - 16B Message Size 1p-1k",
+  "title": "Porównanie przepustowości - 16B 1p-1k",
   "testConfig": {
     "messageSizeInBytes": "16",
     "messageCount": "100000",

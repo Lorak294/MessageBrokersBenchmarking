@@ -7,6 +7,17 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+plt.rcParams.update(
+    {
+        "font.size": 14,
+        "axes.titlesize": 16,
+        "axes.labelsize": 14,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+        "legend.fontsize": 11,
+    }
+)
+
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -235,12 +246,12 @@ def plot_throughput(groups, all_metrics, output_dir, title):
                     f"{val:,.0f}",
                     ha="center",
                     va="bottom",
-                    fontsize=7,
+                    fontsize=10,
                 )
 
-    ax.set_xlabel("Message Size")
-    ax.set_ylabel("Messages / second")
-    ax.set_title(f"{title} - Throughput (msg/s)")
+    ax.set_xlabel("Rozmiar wiadomości")
+    ax.set_ylabel("Wiadomości / sekundę")
+    ax.set_title(f"{title}")
     ax.set_xticks(x)
     ax.set_xticklabels(group_names)
     ax.legend()
@@ -267,13 +278,13 @@ def plot_throughput(groups, all_metrics, output_dir, title):
                     f"{val:.2f}",
                     ha="center",
                     va="bottom",
-                    fontsize=7,
+                    fontsize=10,
                 )
 
     ax.set_yscale("log")
-    ax.set_xlabel("Message Size")
-    ax.set_ylabel("MB / second (log scale)")
-    ax.set_title(f"{title} - Throughput (MB/s)")
+    ax.set_xlabel("Rozmiar wiadomości")
+    ax.set_ylabel("MB / sekundę (skala log.)")
+    ax.set_title(f"{title}")
     ax.set_xticks(x)
     ax.set_xticklabels(group_names)
     ax.legend()
@@ -342,14 +353,14 @@ def plot_latency_over_time(datasets, group_name, title, output_dir, warmup_skip=
     plt.figure(figsize=(14, 6))
     for name, df in datasets.items():
         color = COLOR_MAP.get(name, "gray")
-        smoothed = df["LatencyMs"].rolling(window=500, min_periods=1).mean()
-        smoothed = smoothed.iloc[warmup_skip:]
+        latency = df["LatencyMs"].iloc[warmup_skip:]
+        smoothed = latency.rolling(window=500, min_periods=500).mean()
         plt.plot(
             smoothed.index, smoothed, label=name, alpha=0.7, linewidth=1.2, color=color
         )
-    plt.xlabel("Message Index (ordered by send time)")
-    plt.ylabel("Latency (ms)")
-    plt.title(f"{title} - Latency Over Time")
+    plt.xlabel("Indeks wiadomości (wg czasu wysłania)")
+    plt.ylabel("Opóźnienie (ms)")
+    plt.title(f"{title} - Opóźnienie w czasie")
     plt.legend()
     plt.tight_layout()
     path = os.path.join(output_dir, f"{group_name}_latency_over_time.png")
@@ -366,9 +377,9 @@ def plot_latency_distribution(datasets, group_name, title, output_dir):
         percentiles = np.linspace(0, 100, len(latency))
         plt.plot(percentiles, latency, label=name, linewidth=2, color=color)
     plt.yscale("log")
-    plt.xlabel("Percentile (%)")
-    plt.ylabel("Latency (ms)")
-    plt.title(f"{title} - Latency Percentiles")
+    plt.xlabel("Percentyl (%)")
+    plt.ylabel("Opóźnienie (ms)")
+    plt.title(f"{title} - Percentyle opóźnień")
     plt.legend()
     plt.tight_layout()
     path = os.path.join(output_dir, f"{group_name}_latency_distribution.png")
@@ -394,7 +405,7 @@ def save_latency_table(metrics_by_name, group_name, output_dir):
     print(f"Saved: {path}")
 
 
-def run_latency(mode_config, output_dir):
+def run_latency(mode_config, output_dir, warmup_skip=100):
     title = mode_config["title"]
     results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
 
@@ -419,7 +430,7 @@ def run_latency(mode_config, output_dir):
 
         save_latency_table(metrics_by_name, g["name"], output_dir)
         plot_latency_over_time(
-            all_datasets[g["name"]], g["name"], g["title"], output_dir
+            all_datasets[g["name"]], g["name"], g["title"], output_dir, warmup_skip
         )
         plot_latency_distribution(
             all_datasets[g["name"]], g["name"], g["title"], output_dir
@@ -503,28 +514,29 @@ def load_messaging_data(group):
     return data
 
 
-def plot_messaging_latency_over_time(data, mode_name, title, output_dir):
+def plot_messaging_latency_over_time(
+    data, mode_name, title, output_dir, warmup_skip=100
+):
     plt.figure(figsize=(14, 6))
     for broker_name, groups_data in data.items():
         shades = SHADE_MAP.get(broker_name, ["#888", "#555", "#333"])
         for gid, df in sorted(groups_data.items()):
             if len(df) == 0:
                 continue
-            smoothed = df["LatencyMs"].rolling(window=500, min_periods=1).mean()
-            smoothed = smoothed.iloc[100:]
+            latency = df["LatencyMs"].iloc[warmup_skip:]
+            smoothed = latency.rolling(window=500, min_periods=500).mean()
             plt.plot(
                 smoothed.index,
                 smoothed,
-                label=f"{broker_name} (Group {gid})",
-                alpha=0.7,
-                linewidth=1.2,
+                label=f"{broker_name} (Grupa {gid})",
+                linewidth=2,
                 color=shades[gid % len(shades)],
             )
-    plt.xlabel("Message Index (ordered by send time)")
+    plt.xlabel("Indeks wiadomości (wg czasu wysłania)")
     plt.yscale("log")
-    plt.ylabel("Latency (ms, log scale)")
-    plt.title(f"{title} - Latency Over Time")
-    plt.legend(fontsize=8, bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.ylabel("Opóźnienie (ms, skala log.)")
+    plt.title(f"{title} - Opóźnienie w czasie")
+    plt.legend(fontsize=12, bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
     path = os.path.join(output_dir, f"{mode_name}_messaging_latency_over_time.png")
     plt.savefig(path, dpi=150)
@@ -544,15 +556,15 @@ def plot_messaging_latency_distribution(data, mode_name, title, output_dir):
             plt.plot(
                 percentiles,
                 latency,
-                label=f"{broker_name} (Group {gid})",
+                label=f"{broker_name} (Grupa {gid})",
                 linewidth=2,
                 color=shades[gid % len(shades)],
             )
     plt.yscale("log")
-    plt.xlabel("Percentile (%)")
-    plt.ylabel("Latency (ms)")
-    plt.title(f"{title} - Latency Percentiles")
-    plt.legend(fontsize=8, bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.xlabel("Percentyl (%)")
+    plt.ylabel("Opóźnienie (ms)")
+    plt.title(f"{title} - Percentyle opóźnień")
+    plt.legend(fontsize=12, bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
     path = os.path.join(output_dir, f"{mode_name}_messaging_latency_distribution.png")
     plt.savefig(path, dpi=150)
@@ -579,7 +591,7 @@ def save_messaging_table(data, group, output_dir):
             else:
                 group_metrics[gid] = compute_metrics(df, message_size)
 
-        col_names = [f"Group {gid}" for gid in group_ids] + ["Max Diff", "Max Diff %"]
+        col_names = [f"Grupa {gid}" for gid in group_ids] + ["Max Diff", "Max Diff %"]
         label_w = max(len(ml[1]) for ml in MESSAGING_METRIC_LABELS) + 2
         col_w = max(max(len(c) for c in col_names), 12) + 2
 
@@ -633,7 +645,7 @@ def save_messaging_table(data, group, output_dir):
     print(f"Saved: {path}")
 
 
-def run_messaging_modes(mode_config, output_dir):
+def run_messaging_modes(mode_config, output_dir, warmup_skip=100):
     title = mode_config["title"]
     results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
 
@@ -654,7 +666,9 @@ def run_messaging_modes(mode_config, output_dir):
         data = load_messaging_data(g)
 
         save_messaging_table(data, g, output_dir)
-        plot_messaging_latency_over_time(data, g["name"], g["title"], output_dir)
+        plot_messaging_latency_over_time(
+            data, g["name"], g["title"], output_dir, warmup_skip
+        )
         plot_messaging_latency_distribution(data, g["name"], g["title"], output_dir)
         print()
 
@@ -670,6 +684,12 @@ def main():
         default="all",
         help="Analysis mode: throughput, latency, messaging-modes, pgmq-modes, or all (default: all)",
     )
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=100,
+        help="Number of initial raw messages to skip (warmup) in latency-over-time plots (default: 100)",
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -680,13 +700,13 @@ def main():
         run_throughput(config["throughput"], output_dir)
 
     if args.mode in ("latency", "all"):
-        run_latency(config["latency"], output_dir)
+        run_latency(config["latency"], output_dir, args.warmup)
 
     if args.mode in ("messaging-modes", "all"):
-        run_messaging_modes(config["messaging-modes"], output_dir)
+        run_messaging_modes(config["messaging-modes"], output_dir, args.warmup)
 
     if args.mode in ("pgmq-modes", "all"):
-        run_latency(config["pgmq-modes"], output_dir)
+        run_latency(config["pgmq-modes"], output_dir, args.warmup)
 
 
 if __name__ == "__main__":

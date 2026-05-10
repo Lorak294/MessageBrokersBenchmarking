@@ -1,5 +1,5 @@
 {
-  "title": "Messaging Modes - Pub/Sub",
+  "title": "Tryby komunikacji - Pub/Sub",
   "testConfig": {
     "messageSizeInBytes": "1024",
     "messageCount": "30000",
