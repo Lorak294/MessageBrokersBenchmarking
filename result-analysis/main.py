@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 
 import numpy as np
@@ -155,7 +156,11 @@ def discover_groups(results_dir):
             }
         )
 
-    groups.sort(key=lambda g: g["message_size_bytes"])
+    def _numeric_sort_key(g):
+        m = re.search(r"\d+", g["name"])
+        return (g["message_size_bytes"], int(m.group()) if m else 0)
+
+    groups.sort(key=_numeric_sort_key)
     return groups
 
 
@@ -418,7 +423,60 @@ def save_latency_table(metrics_by_name, group_name, output_dir):
     print(f"Saved: {path}")
 
 
-def run_latency(mode_config, output_dir, warmup_skip=None, rolling_window=500):
+def plot_latency_percentile_bars(groups, all_metrics, output_dir, title):
+    """Plot 3 aggregated bar charts (P50, P95, P99) across all frequency groups."""
+
+    def _extract_rate_label(t):
+        m = re.search(r"(\d+ wiad\./s \(\d+MB/s\))", t)
+        return m.group(1) if m else t
+
+    group_labels = [_extract_rate_label(g["title"]) for g in groups]
+    mq_names = collect_all_mq_names(groups)
+    colors = [COLOR_MAP.get(mq, "gray") for mq in mq_names]
+    x = np.arange(len(group_labels))
+    width = 0.8 / len(mq_names)
+
+    percentiles = [
+        ("p50_ms", "P50 (mediana)", "latency_p50.png"),
+        ("p95_ms", "P95", "latency_p95.png"),
+        ("p99_ms", "P99", "latency_p99.png"),
+    ]
+
+    for metric_key, percentile_label, filename in percentiles:
+        fig, ax = plt.subplots(figsize=(12, 6))
+        for i, mq in enumerate(mq_names):
+            values = [
+                all_metrics.get((g["name"], mq), {}).get(metric_key, 0) for g in groups
+            ]
+            offset = (i - len(mq_names) / 2 + 0.5) * width
+            bars = ax.bar(x + offset, values, width, label=mq, color=colors[i])
+            for bar, val in zip(bars, values):
+                if val > 0:
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height(),
+                        f"{val:.2f}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=10,
+                    )
+
+        ax.set_xlabel("Częstotliwość wysylki wiadomości")
+        ax.set_ylabel("Opóźnienie (ms)")
+        ax.set_title(f"{title} - {percentile_label}")
+        ax.set_xticks(x)
+        ax.set_xticklabels(group_labels)
+        ax.legend()
+        plt.tight_layout()
+        path = os.path.join(output_dir, filename)
+        plt.savefig(path, dpi=150)
+        print(f"Saved: {path}")
+        plt.show()
+
+
+def run_latency(
+    mode_config, output_dir, warmup_skip=None, rolling_window=500, aggregated=False
+):
     title = mode_config["title"]
     results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
 
@@ -442,13 +500,22 @@ def run_latency(mode_config, output_dir, warmup_skip=None, rolling_window=500):
         }
 
         save_latency_table(metrics_by_name, g["name"], output_dir)
-        plot_latency_over_time(
-            all_datasets[g["name"]], g["name"], g["title"], output_dir, rolling_window
-        )
-        plot_latency_distribution(
-            all_datasets[g["name"]], g["name"], g["title"], output_dir
-        )
+
+        if not aggregated:
+            plot_latency_over_time(
+                all_datasets[g["name"]],
+                g["name"],
+                g["title"],
+                output_dir,
+                rolling_window,
+            )
+            plot_latency_distribution(
+                all_datasets[g["name"]], g["name"], g["title"], output_dir
+            )
         print()
+
+    if aggregated:
+        plot_latency_percentile_bars(groups, all_metrics, output_dir, title)
 
 
 # ── Messaging modes ────────────────────────────────────────────────────────────
@@ -724,7 +791,9 @@ def main():
         run_throughput(config["throughput"], output_dir, args.warmup)
 
     if args.mode in ("latency", "all"):
-        run_latency(config["latency"], output_dir, args.warmup, args.rolling)
+        run_latency(
+            config["latency"], output_dir, args.warmup, args.rolling, aggregated=True
+        )
 
     if args.mode in ("messaging-modes", "all"):
         run_messaging_modes(
