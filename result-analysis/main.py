@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
 
 plt.rcParams.update(
     {
@@ -53,12 +54,15 @@ def find_csv(directory):
     return None
 
 
-def load_results(csv_path):
+def load_results(csv_path, warmup_skip=None):
     df = pd.read_csv(csv_path)
     df["LatencyMs"] = (
         df["ReceiveTimestampTicks"] - df["SendTimestampTicks"]
     ) / TICKS_PER_MS
     df = df.sort_values("SendTimestampTicks").reset_index(drop=True)
+    skip = warmup_skip if warmup_skip is not None else max(1, int(len(df) * 0.01))
+    if skip > 0:
+        df = df.iloc[skip:].reset_index(drop=True)
     return df
 
 
@@ -165,7 +169,7 @@ def collect_all_mq_names(groups):
     return names
 
 
-def load_all_metrics(groups):
+def load_all_metrics(groups, warmup_skip=None):
     """Load results and compute metrics for all groups. Returns (all_metrics, all_datasets)."""
     all_metrics = {}
     all_datasets = {}
@@ -173,7 +177,7 @@ def load_all_metrics(groups):
     for g in groups:
         datasets = {}
         for col in g["columns"]:
-            df = load_results(col["csv_path"])
+            df = load_results(col["csv_path"], warmup_skip)
             datasets[col["name"]] = df
             all_metrics[(g["name"], col["name"])] = compute_metrics(
                 df, g["message_size_bytes"]
@@ -255,6 +259,10 @@ def plot_throughput(groups, all_metrics, output_dir, title):
     ax.set_xticks(x)
     ax.set_xticklabels(group_names)
     ax.legend()
+    formatter = ScalarFormatter(useMathText=True)
+    formatter.set_scientific(True)
+    formatter.set_powerlimits((0, 0))
+    ax.yaxis.set_major_formatter(formatter)
     plt.tight_layout()
     path = os.path.join(output_dir, "throughput_msgs.png")
     plt.savefig(path, dpi=150)
@@ -319,14 +327,14 @@ def save_throughput_table(groups, all_metrics, output_dir):
     print(output)
 
 
-def run_throughput(mode_config, output_dir):
+def run_throughput(mode_config, output_dir, warmup_skip=None):
     title = mode_config["title"]
     results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
 
     print(f"=== {title} ===\n")
 
     groups = discover_groups(results_dir)
-    all_metrics, _ = load_all_metrics(groups)
+    all_metrics, _ = load_all_metrics(groups, warmup_skip)
 
     save_throughput_table(groups, all_metrics, output_dir)
     plot_throughput(groups, all_metrics, output_dir, title)
@@ -349,11 +357,11 @@ LATENCY_METRIC_LABELS = [
 ]
 
 
-def plot_latency_over_time(datasets, group_name, title, output_dir, warmup_skip=100):
+def plot_latency_over_time(datasets, group_name, title, output_dir):
     plt.figure(figsize=(14, 6))
     for name, df in datasets.items():
         color = COLOR_MAP.get(name, "gray")
-        latency = df["LatencyMs"].iloc[warmup_skip:]
+        latency = df["LatencyMs"]
         smoothed = latency.rolling(window=500, min_periods=500).mean()
         plt.plot(
             smoothed.index, smoothed, label=name, alpha=0.7, linewidth=1.2, color=color
@@ -405,14 +413,14 @@ def save_latency_table(metrics_by_name, group_name, output_dir):
     print(f"Saved: {path}")
 
 
-def run_latency(mode_config, output_dir, warmup_skip=100):
+def run_latency(mode_config, output_dir, warmup_skip=None):
     title = mode_config["title"]
     results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
 
     print(f"=== {title} ===\n")
 
     groups = discover_groups(results_dir)
-    all_metrics, all_datasets = load_all_metrics(groups)
+    all_metrics, all_datasets = load_all_metrics(groups, warmup_skip)
 
     for g in groups:
         tc = g["test_config"]
@@ -430,7 +438,7 @@ def run_latency(mode_config, output_dir, warmup_skip=100):
 
         save_latency_table(metrics_by_name, g["name"], output_dir)
         plot_latency_over_time(
-            all_datasets[g["name"]], g["name"], g["title"], output_dir, warmup_skip
+            all_datasets[g["name"]], g["name"], g["title"], output_dir
         )
         plot_latency_distribution(
             all_datasets[g["name"]], g["name"], g["title"], output_dir
@@ -497,7 +505,7 @@ def discover_messaging_groups(results_dir):
     return groups
 
 
-def load_messaging_data(group):
+def load_messaging_data(group, warmup_skip=None):
     """Load CSV for each broker and split by ConsumerGroup.
 
     Returns dict: {broker_name: {group_id: DataFrame}}
@@ -505,7 +513,7 @@ def load_messaging_data(group):
     """
     data = {}
     for broker in group["brokers"]:
-        df = load_results(broker["csv_path"])
+        df = load_results(broker["csv_path"], warmup_skip)
         by_group = {}
         for gid in range(3):
             sub = df[df["ConsumerGroup"] == gid].reset_index(drop=True)
@@ -514,16 +522,14 @@ def load_messaging_data(group):
     return data
 
 
-def plot_messaging_latency_over_time(
-    data, mode_name, title, output_dir, warmup_skip=100
-):
+def plot_messaging_latency_over_time(data, mode_name, title, output_dir):
     plt.figure(figsize=(14, 6))
     for broker_name, groups_data in data.items():
         shades = SHADE_MAP.get(broker_name, ["#888", "#555", "#333"])
         for gid, df in sorted(groups_data.items()):
             if len(df) == 0:
                 continue
-            latency = df["LatencyMs"].iloc[warmup_skip:]
+            latency = df["LatencyMs"]
             smoothed = latency.rolling(window=500, min_periods=500).mean()
             plt.plot(
                 smoothed.index,
@@ -645,7 +651,7 @@ def save_messaging_table(data, group, output_dir):
     print(f"Saved: {path}")
 
 
-def run_messaging_modes(mode_config, output_dir, warmup_skip=100):
+def run_messaging_modes(mode_config, output_dir, warmup_skip=None):
     title = mode_config["title"]
     results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
 
@@ -663,12 +669,10 @@ def run_messaging_modes(mode_config, output_dir, warmup_skip=100):
             f"Consumers: {tc['consumersCount']}\n"
         )
 
-        data = load_messaging_data(g)
+        data = load_messaging_data(g, warmup_skip)
 
         save_messaging_table(data, g, output_dir)
-        plot_messaging_latency_over_time(
-            data, g["name"], g["title"], output_dir, warmup_skip
-        )
+        plot_messaging_latency_over_time(data, g["name"], g["title"], output_dir)
         plot_messaging_latency_distribution(data, g["name"], g["title"], output_dir)
         print()
 
@@ -687,8 +691,8 @@ def main():
     parser.add_argument(
         "--warmup",
         type=int,
-        default=100,
-        help="Number of initial raw messages to skip (warmup) in latency-over-time plots (default: 100)",
+        default=None,
+        help="Number of initial messages to skip (warmup). Default: 1%% of message count per result set. Use 0 to disable.",
     )
     args = parser.parse_args()
 
@@ -697,7 +701,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     if args.mode in ("throughput", "all"):
-        run_throughput(config["throughput"], output_dir)
+        run_throughput(config["throughput"], output_dir, args.warmup)
 
     if args.mode in ("latency", "all"):
         run_latency(config["latency"], output_dir, args.warmup)

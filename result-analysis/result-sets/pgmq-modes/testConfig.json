@@ -1,5 +1,5 @@
 {
-  "title": "Porównanie trybów PGMQ - 1000 wiad./s (1MB/s) 1p-3k",
+  "title": "Porównanie opóźnienia dla trybów odczytu PGMQ",
   "testConfig": {
     "messageSizeInBytes": "1024",
     "messageCount": "10000",

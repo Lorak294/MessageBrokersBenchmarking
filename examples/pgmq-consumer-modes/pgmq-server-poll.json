@@ -1,10 +1,10 @@
 {
   "producersCount": 1,
-  "consumerGroups": [1],
+  "consumerGroups": [3],
   "communicationMode": "PointToPoint",
-  "messagesPerConsumerGroup": [1000],
+  "messagesPerConsumerGroup": [10000],
   "messageSizeInBytes": 1024,
-  "sendFrequencyMps": 200,
+  "sendFrequencyMps": 1000,
   "consumerIdleTimeoutSeconds": 15,
   "mqConfig": {
     "implementation": "PgMq",
@@ -16,7 +16,7 @@
       "ConsumerMode": "ServerPoll",
       "PollIntervalMs": "5",
       "MaxPollSeconds": "5",
-      "UsePop": "false"
+      "UsePop": "true"
     }
   }
 }
