@@ -2,7 +2,7 @@
   "outputPath": "output",
   "throughput": {
     "title": "Porównanie przepustowości wg rozmiaru wiadomości",
-    "resultsSetsDir": "result-sets/throughput"
+    "resultsSetsDir": "result-sets/throughput-optimal"
   },
   "latency": {
     "title": "Porównanie opóźnień",

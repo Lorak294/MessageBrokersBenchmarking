@@ -3,7 +3,7 @@
   "consumerGroups": [1],
   "communicationMode": "PointToPoint",
   "messageCount": 100000,
-  "messageSizeInBytes": 1000,
+  "messageSizeInBytes": 1024,
   "consumerIdleTimeoutSeconds": 10,
   "sendFrequencyMps": 10000,
   "mqConfig": {
@@ -13,10 +13,10 @@
       "TopicName": "benchmark_throughput",
       "GroupId": "benchmark_group",
       "NumPartitions": "1",
-      "Acks": "All",
+      "Acks": "Leader",
       "EnableIdempotence": "false",
-      "LingerMs": "5",
-      "BatchSize": "1000",
+      "LingerMs": "1",
+      "BatchSize": "1024",
       "UseBufferedProducer": "true",
       "AutoOffsetReset": "Earliest",
       "EnableAutoCommit": "true"

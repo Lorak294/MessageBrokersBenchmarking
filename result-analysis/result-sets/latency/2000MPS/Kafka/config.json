@@ -3,7 +3,7 @@
   "consumerGroups": [1],
   "communicationMode": "PointToPoint",
   "messageCount": 100000,
-  "messageSizeInBytes": 1000,
+  "messageSizeInBytes": 1024,
   "consumerIdleTimeoutSeconds": 10,
   "sendFrequencyMps": 2000,
   "mqConfig": {
@@ -16,7 +16,7 @@
       "Acks": "All",
       "EnableIdempotence": "false",
       "LingerMs": "5",
-      "BatchSize": "1000",
+      "BatchSize": "1024",
       "UseBufferedProducer": "true",
       "AutoOffsetReset": "Earliest",
       "EnableAutoCommit": "true"

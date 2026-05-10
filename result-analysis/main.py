@@ -357,17 +357,22 @@ LATENCY_METRIC_LABELS = [
 ]
 
 
-def plot_latency_over_time(datasets, group_name, title, output_dir):
+def plot_latency_over_time(datasets, group_name, title, output_dir, rolling_window=500):
     plt.figure(figsize=(14, 6))
     for name, df in datasets.items():
         color = COLOR_MAP.get(name, "gray")
         latency = df["LatencyMs"]
-        smoothed = latency.rolling(window=500, min_periods=500).mean()
-        plt.plot(
-            smoothed.index, smoothed, label=name, alpha=0.7, linewidth=1.2, color=color
-        )
+        if rolling_window > 0:
+            y = latency.rolling(
+                window=rolling_window, min_periods=rolling_window
+            ).mean()
+        else:
+            y = latency
+        plt.plot(y.index, y, label=name, alpha=0.7, linewidth=1.2, color=color)
+
     plt.xlabel("Indeks wiadomości (wg czasu wysłania)")
-    plt.ylabel("Opóźnienie (ms)")
+    plt.yscale("log")
+    plt.ylabel("Opóźnienie (ms, skala log.)")
     plt.title(f"{title} - Opóźnienie w czasie")
     plt.legend()
     plt.tight_layout()
@@ -413,7 +418,7 @@ def save_latency_table(metrics_by_name, group_name, output_dir):
     print(f"Saved: {path}")
 
 
-def run_latency(mode_config, output_dir, warmup_skip=None):
+def run_latency(mode_config, output_dir, warmup_skip=None, rolling_window=500):
     title = mode_config["title"]
     results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
 
@@ -438,7 +443,7 @@ def run_latency(mode_config, output_dir, warmup_skip=None):
 
         save_latency_table(metrics_by_name, g["name"], output_dir)
         plot_latency_over_time(
-            all_datasets[g["name"]], g["name"], g["title"], output_dir
+            all_datasets[g["name"]], g["name"], g["title"], output_dir, rolling_window
         )
         plot_latency_distribution(
             all_datasets[g["name"]], g["name"], g["title"], output_dir
@@ -522,7 +527,9 @@ def load_messaging_data(group, warmup_skip=None):
     return data
 
 
-def plot_messaging_latency_over_time(data, mode_name, title, output_dir):
+def plot_messaging_latency_over_time(
+    data, mode_name, title, output_dir, rolling_window=500
+):
     plt.figure(figsize=(14, 6))
     for broker_name, groups_data in data.items():
         shades = SHADE_MAP.get(broker_name, ["#888", "#555", "#333"])
@@ -530,10 +537,15 @@ def plot_messaging_latency_over_time(data, mode_name, title, output_dir):
             if len(df) == 0:
                 continue
             latency = df["LatencyMs"]
-            smoothed = latency.rolling(window=500, min_periods=500).mean()
+            if rolling_window > 0:
+                y = latency.rolling(
+                    window=rolling_window, min_periods=rolling_window
+                ).mean()
+            else:
+                y = latency
             plt.plot(
-                smoothed.index,
-                smoothed,
+                y.index,
+                y,
                 label=f"{broker_name} (Grupa {gid})",
                 linewidth=2,
                 color=shades[gid % len(shades)],
@@ -651,7 +663,7 @@ def save_messaging_table(data, group, output_dir):
     print(f"Saved: {path}")
 
 
-def run_messaging_modes(mode_config, output_dir, warmup_skip=None):
+def run_messaging_modes(mode_config, output_dir, warmup_skip=None, rolling_window=500):
     title = mode_config["title"]
     results_dir = os.path.join(SCRIPT_DIR, mode_config["resultsSetsDir"])
 
@@ -672,7 +684,9 @@ def run_messaging_modes(mode_config, output_dir, warmup_skip=None):
         data = load_messaging_data(g, warmup_skip)
 
         save_messaging_table(data, g, output_dir)
-        plot_messaging_latency_over_time(data, g["name"], g["title"], output_dir)
+        plot_messaging_latency_over_time(
+            data, g["name"], g["title"], output_dir, rolling_window
+        )
         plot_messaging_latency_distribution(data, g["name"], g["title"], output_dir)
         print()
 
@@ -694,6 +708,12 @@ def main():
         default=None,
         help="Number of initial messages to skip (warmup). Default: 1%% of message count per result set. Use 0 to disable.",
     )
+    parser.add_argument(
+        "--rolling",
+        type=int,
+        default=500,
+        help="Rolling window size for latency-over-time plots. Use 0 to disable smoothing. Default: 500.",
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -704,13 +724,15 @@ def main():
         run_throughput(config["throughput"], output_dir, args.warmup)
 
     if args.mode in ("latency", "all"):
-        run_latency(config["latency"], output_dir, args.warmup)
+        run_latency(config["latency"], output_dir, args.warmup, args.rolling)
 
     if args.mode in ("messaging-modes", "all"):
-        run_messaging_modes(config["messaging-modes"], output_dir, args.warmup)
+        run_messaging_modes(
+            config["messaging-modes"], output_dir, args.warmup, args.rolling
+        )
 
     if args.mode in ("pgmq-modes", "all"):
-        run_latency(config["pgmq-modes"], output_dir, args.warmup)
+        run_latency(config["pgmq-modes"], output_dir, args.warmup, args.rolling)
 
 
 if __name__ == "__main__":
