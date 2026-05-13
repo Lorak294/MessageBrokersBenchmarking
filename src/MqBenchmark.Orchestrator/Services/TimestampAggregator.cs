@@ -16,6 +16,7 @@ public class TimestampAggregator
     /// Expected messages per consumer group. If null, all groups expect total sent count (PubSub/Streaming).
     /// </summary>
     private int[]? _expectedMessagesPerGroup;
+    private int _expectedGroupCount;
     
     public int WorkerCount => _workerTimestamps.Count;
 
@@ -46,6 +47,7 @@ public class TimestampAggregator
     {
         _workerTimestamps.Clear();
         _expectedMessagesPerGroup = null;
+        _expectedGroupCount = 0;
         _logger.LogInformation("Timestamp aggregator reset");
     }
     
@@ -53,9 +55,10 @@ public class TimestampAggregator
     /// Sets expected message counts per consumer group for accurate "messages lost" calculation.
     /// For PointToPoint mode, each group has its own quota. For PubSub/Streaming, pass null (all groups expect all messages).
     /// </summary>
-    public void SetExpectedMessagesPerGroup(int[]? expectedPerGroup)
+    public void SetExpectedMessagesPerGroup(int[]? expectedPerGroup, int groupCount)
     {
         _expectedMessagesPerGroup = expectedPerGroup;
+        _expectedGroupCount = groupCount;
     }
     
     public BenchmarkResults ComputeResults()
@@ -68,19 +71,17 @@ public class TimestampAggregator
             .SelectMany(w => w.Timestamps)
             .ToDictionary(t => t.MessageId, t => t.TimestampTicks);
 
-        // Group consumer timestamps by consumer group
+        // Group consumer timestamps by consumer group index
         var consumersByGroup = allTimestamps
             .Where(w => w.Role == WorkerConfig.Roles.Consumer)
-            .GroupBy(w => w.ConsumerGroupIndex)
-            .OrderBy(g => g.Key)
-            .ToList();
+            .SelectMany(w => w.Timestamps.Select(t => (Timestamp: t, w.WorkerId, w.ConsumerGroupIndex)))
+            .GroupBy(x => x.ConsumerGroupIndex)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
+        var groupCount = Math.Max(_expectedGroupCount, consumersByGroup.Count > 0 ? consumersByGroup.Keys.Max() + 1 : 1);
+        
         _logger.LogInformation("Computing results: {ProducerCount} sent, {GroupCount} consumer group(s)",
-            producerTimestamps.Count, consumersByGroup.Count);
-
-        // If no consumer groups found, create a single empty group
-        if (consumersByGroup.Count == 0)
-            consumersByGroup = [new FakeGrouping(0, [])];
+            producerTimestamps.Count, groupCount);
 
         // Helper for percentiles
         double GetPercentile(List<double> sorted, double percentile)
@@ -92,36 +93,34 @@ public class TimestampAggregator
 
         // Compute per-group results
         var perGroupResults = new List<GroupResults>();
-        // Flat list of all consumer timestamps for CSV and duration calculation.
-        // Uses a list (not dictionary) because the same MessageId can appear in multiple groups (PubSub/Streaming).
         var allConsumerTimestamps = new List<(Guid MessageId, long Ticks, Guid WorkerId, int GroupIndex)>();
 
-        foreach (var group in consumersByGroup)
+        for (int groupIndex = 0; groupIndex < groupCount; groupIndex++)
         {
-            var groupTimestamps = group
-                .SelectMany(w => w.Timestamps.Select(t => (t, w.WorkerId)))
-                .ToList();
+            var groupTimestamps = consumersByGroup.TryGetValue(groupIndex, out var entries)
+                ? entries
+                : [];
 
             // Track for CSV
-            foreach (var (t, workerId) in groupTimestamps)
-                allConsumerTimestamps.Add((t.MessageId, t.TimestampTicks, workerId, group.Key));
+            foreach (var entry in groupTimestamps)
+                allConsumerTimestamps.Add((entry.Timestamp.MessageId, entry.Timestamp.TimestampTicks, entry.WorkerId, groupIndex));
 
             // Calculate latencies for this group
             var groupLatencies = new List<double>();
-            foreach (var (t, _) in groupTimestamps)
+            foreach (var entry in groupTimestamps)
             {
-                if (producerTimestamps.TryGetValue(t.MessageId, out var sendTicks))
+                if (producerTimestamps.TryGetValue(entry.Timestamp.MessageId, out var sendTicks))
                 {
-                    groupLatencies.Add((t.TimestampTicks - sendTicks) / (double)TimeSpan.TicksPerMillisecond);
+                    groupLatencies.Add((entry.Timestamp.TimestampTicks - sendTicks) / (double)TimeSpan.TicksPerMillisecond);
                 }
             }
 
             var sorted = groupLatencies.OrderBy(l => l).ToList();
             perGroupResults.Add(new GroupResults
             {
-                GroupIndex = group.Key,
+                GroupIndex = groupIndex,
                 TotalMessagesReceived = groupTimestamps.Count,
-                MessagesLost = GetExpectedForGroup(group.Key, producerTimestamps.Count) - groupLatencies.Count,
+                MessagesLost = GetExpectedForGroup(groupIndex, producerTimestamps.Count) - groupLatencies.Count,
                 AverageLatencyMs = sorted.Count > 0 ? sorted.Average() : 0,
                 MinLatencyMs = sorted.Count > 0 ? sorted.Min() : 0,
                 MaxLatencyMs = sorted.Count > 0 ? sorted.Max() : 0,
@@ -169,12 +168,6 @@ public class TimestampAggregator
             results.TotalMessagesSent, results.TotalDurationSeconds, results.MessagesPerSecond, fileName);
 
         return results;
-    }
-
-    private sealed class FakeGrouping(int key, List<WorkerTimestampData> items) 
-        : List<WorkerTimestampData>(items), IGrouping<int, WorkerTimestampData>
-    {
-        public int Key => key;
     }
 
     private int GetExpectedForGroup(int groupIndex, int totalSent)

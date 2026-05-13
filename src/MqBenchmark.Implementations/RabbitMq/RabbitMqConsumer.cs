@@ -13,14 +13,14 @@ public class RabbitMqConsumer : IMqConsumer
     private string? _consumerTag;
     private CommunicationMode _communicationMode;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_channel is not null && _consumerTag is not null)
         {
-            try { _channel.BasicCancelAsync(_consumerTag).GetAwaiter().GetResult(); } catch { }
+            try { await _channel.BasicCancelAsync(_consumerTag); } catch { }
         }
-        _channel?.Dispose();
-        _connection?.Dispose();
+        if (_channel is not null) await _channel.DisposeAsync();
+        if (_connection is not null) await _connection.DisposeAsync();
     }
 
     public async Task InitializeAsync(MqConfig configuration)

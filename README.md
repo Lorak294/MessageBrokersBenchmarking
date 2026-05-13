@@ -6,7 +6,7 @@ A distributed benchmarking platform for comparing **Apache Kafka**, **RabbitMQ**
 
 This platform measures how different message brokers perform under controlled conditions. It uses a centralized orchestrator coordinating multiple worker processes over SignalR, allowing scalable distributed tests with precise timestamp-based latency measurement.
 
-Brokers are constrained to fixed resources (CPU/memory) while workers run unconstrained, ensuring the benchmark measures broker performance rather than client-side bottlenecks.
+Brokers, workers and orchestrattor are constrained to fixed resources (CPU/memory) to ensure fair comparisons.
 
 ## Architecture
 
@@ -114,16 +114,13 @@ Test configs are JSON files passed to the `/api/benchmarking/initialize` endpoin
   "messagesPerConsumerGroup": [5000, 3000],
   "messageSizeInBytes": 256,
   "sendFrequencyMps": 5000,
-  "consumerIdleTimeoutSeconds": 15,
   "mqConfig": {
     "implementation": "Kafka",
     "additionalSettings": {
-      "BootstrapServers": "kafka:9092",
-      "Acks": "Leader",
-      "LingerMs": "5",
-      "BatchSize": "65536",
-      "UseBufferedProducer": "true",
-      "NumPartitions": "2"
+      "bootstrapServers": "kafka:9092",
+      "lingerMs": "5",
+      "batchSize": "65536",
+      "useBufferedProducer": "true"
     }
   }
 }
@@ -139,15 +136,16 @@ Test configs are JSON files passed to the `/api/benchmarking/initialize` endpoin
   "messageCount": 10000,
   "messageSizeInBytes": 256,
   "sendFrequencyMps": 5000,
-  "consumerIdleTimeoutSeconds": 15,
   "mqConfig": {
     "implementation": "RabbitMQ",
     "additionalSettings": {
-      "Hostname": "rabbitmq",
-      "Port": "5672",
-      "Username": "guest",
-      "Password": "guest",
-      "PrefetchCount": "200"
+      "hostname": "rabbitmq",
+      "port": "5672",
+      "username": "guest",
+      "password": "guest",
+      "prefetchCount": "200",
+      "durableMode": "false",
+      "publisherConfirms": "false"
     }
   }
 }
@@ -164,15 +162,14 @@ Test configs are JSON files passed to the `/api/benchmarking/initialize` endpoin
 | `messagesPerConsumerGroup` | Per-group message counts for PointToPoint (e.g. `[5000, 3000]`). If omitted, `messageCount` is split equally. Ignored for PubSub/Streaming. |
 | `messageSizeInBytes` | Payload size per message |
 | `sendFrequencyMps` | Optional rate limit in messages/second (omit for max throughput) |
-| `consumerIdleTimeoutSeconds` | Seconds of inactivity before consumer stops (default 15) |
 
 ### Broker-Specific Settings (`additionalSettings`)
 
-**Kafka**: `BootstrapServers`, `Acks`, `LingerMs`, `BatchSize`, `UseBufferedProducer`, `EnableIdempotence`, `EnableAutoCommit`, `NumPartitions`, `AutoOffsetReset`
+**Kafka**: `bootstrapServers`, `lingerMs`, `batchSize`, `useBufferedProducer`
 
-**RabbitMQ**: `Hostname`, `Port`, `Username`, `Password`, `DurableMode`, `PrefetchCount`, `ConsumerDispatchConcurrency`, `PublisherConfirms`
+**RabbitMQ**: `hostname`, `port`, `username`, `password`, `durableMode`, `prefetchCount`, `publisherConfirms`
 
-**PGMQ**: `ConnectionString`, `VisibilityTimeout`, `QueueMode`, `MessageReadMode`, `ConsumerMode`, `PollIntervalMs`, `MaxPollSeconds`, `UsePop`, `UseBufferedProducer`, `ProducerBatchSize`, `ProducerLingerMs`, `ConsumerBatchSize`
+**PGMQ**: `connectionString`, `visibilityTimeout`, `queueMode`, `messageReadMode`, `consumerMode`, `pollIntervalMs`, `maxPollSeconds`, `notifyThrottleMs`, `usePop`, `useBufferedProducer`, `producerBatchSize`, `producerLingerMs`, `consumerBatchSize`
 
 ## Running
 
@@ -189,7 +186,7 @@ docker compose --profile kafka up --build --scale worker=6
 # Initialize a test
 curl -X POST http://localhost:8080/api/benchmarking/initialize \
   -H "Content-Type: application/json" \
-  -d @examples/kafka.json
+  -d @example-configurations/kafka-p2p.json
 
 # Run the test (blocks until complete, returns results)
 curl -X POST http://localhost:8080/api/benchmarking/start
@@ -219,31 +216,24 @@ src/
 ├── MqBenchmark.Worker/            # Worker process (receives role, produces/consumes)
 └── MqBenchmark.Orchestrator/      # REST API + SignalR hub, test coordination, routing plan generation
 
-examples/                           # Ready-to-use test configuration files
+example-configurations/             # Ready-to-use test configuration files
 result-analysis/                    # Python tool for generating charts & tables from CSV results
 ```
 
 ## Example Configs
 
-The `examples/` directory contains configs for common scenarios:
+The `example-configurations/` directory contains configs for all broker/mode combinations:
 
-| Config | Mode | Broker | Description |
-|--------|------|--------|-------------|
-| `kafka.json` | PointToPoint | Kafka | 1P/1C, 1000 msgs at 200 MPS |
-| `kafka-pubsub.json` | PubSub | Kafka | 2P, 2 groups of 2 consumers |
-| `kafka-streaming.json` | Streaming | Kafka | 2P, 2 groups of 2 consumers |
-| `rabbitmq.json` | PointToPoint | RabbitMQ | 1P/1C, 1000 msgs at 200 MPS |
-| `rabbitmq-pubsub.json` | PubSub | RabbitMQ | 2P, 2 groups of 2 consumers |
-| `rabbitmq-streaming.json` | Streaming | RabbitMQ | 2P, 2 groups of 2 consumers |
-| `pgmq.json` | PointToPoint | PGMQ | 1P/1C, 1000 msgs at 200 MPS |
-| `pgmq-pubsub.json` | PubSub | PGMQ | 2P, 2 groups of 2 consumers |
-| `pgmq-streaming.json` | Streaming | PGMQ | 2P, 2 groups of 2 consumers |
-| `throughput-kafka-fast.json` | PointToPoint | Kafka | Max throughput, buffered producer |
-| `throughput-kafka-durable.json` | PointToPoint | Kafka | Durable mode with idempotence |
-| `throughput-rabbitmq-fast.json` | PointToPoint | RabbitMQ | Max throughput config |
-| `throughput-rabbitmq-durable.json` | PointToPoint | RabbitMQ | Durable + publisher confirms |
-| `throughput-pgmq-fast.json` | PointToPoint | PGMQ | Batch send/pop, unlogged queue |
-| `throughput-pgmq-durable.json` | PointToPoint | PGMQ | Durable with archive mode |
+| Config | Mode | Broker |
+|--------|------|--------|
+| `kafka-p2p.json` | PointToPoint | Kafka |
+| `kafka-pubsub-streaming.json` | PubSub | Kafka |
+| `rabbitmq-p2p.json` | PointToPoint | RabbitMQ |
+| `rabbitmq-pubsub.json` | PubSub | RabbitMQ |
+| `rabbitmq-streaming.json` | Streaming | RabbitMQ |
+| `pgmq-p2p.json` | PointToPoint | PGMQ |
+| `pgmq-pubsub.json` | PubSub | PGMQ |
+| `pgmq-streaming.json` | Streaming | PGMQ |
 
 ## Result Analysis
 
@@ -272,8 +262,7 @@ Results are read from `result-sets/` (organized as `{test-type}/{group}/{broker}
 - **Kafka buffered producer** with queue-full backpressure — `Produce()` with retry on `Local_QueueFull` for high throughput without hanging
 - **RabbitMQ publisher confirms** — optional config to ensure `BasicPublishAsync` blocks until broker confirms, giving accurate durable-mode latency
 - **PGMQ batch operations** — `send_batch()` and batch pop/read/delete to minimize round-trips
-- **Consumer stop via idle timeout** — consumers don't know total message count; they drain until no messages arrive for N seconds
+- **Consumer stop via idle timeout** — consumers don't know total message count; they drain until no messages arrive for 10 seconds (hardcoded constant)
 - **Janitor phase** — dedicated pre-test cleanup ensures consistent starting state across runs
-- **No CPU limits on workers** — workers shouldn't be the bottleneck; brokers are constrained (2 CPU / 1 GB for Kafka & RabbitMQ, 4 CPU / 2 GB for PGMQ)
 - **Rate limiting** — hybrid sleep + spin-wait (`RateLimiter`) for precise send frequency control
 - **Custom PGMQ client** — wraps raw SQL calls to `pgmq.*` functions rather than using an external library, enabling full control over batch APIs and topic operations

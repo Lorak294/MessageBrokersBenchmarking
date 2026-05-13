@@ -16,17 +16,20 @@ public class PgMqConsumer : IMqConsumer
     private Task? _consumptionTask;
     private bool _disposed;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
 
         _consumptionCts?.Cancel();
 
-        try { _consumptionTask?.Wait(TimeSpan.FromSeconds(5)); }
-        catch { }
+        if (_consumptionTask != null)
+        {
+            try { await _consumptionTask.WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch { }
+        }
 
-        _notifyListener?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        _pgmqClient?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        if (_notifyListener is not null) await _notifyListener.DisposeAsync();
+        if (_pgmqClient is not null) await _pgmqClient.DisposeAsync();
         _consumptionCts?.Dispose();
         _disposed = true;
     }

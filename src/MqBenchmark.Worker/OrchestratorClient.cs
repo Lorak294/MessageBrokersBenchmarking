@@ -75,8 +75,16 @@ public class OrchestratorClient : BackgroundService
                     
                     await _worker.StartTestAsync();
                     
-                    _logger.LogInformation("Test finished successfully. Preparing to send timestamps (role: {Role}).", 
-                        _worker.GetTimestampData().Role);
+                    var role = _worker.GetTimestampData().Role;
+                    _logger.LogInformation("Test finished successfully (role: {Role}).", role);
+                    
+                    // Producers signal completion immediately so consumers can start draining,
+                    // without waiting for timestamp upload.
+                    if (role == "Producer")
+                    {
+                        _logger.LogInformation(">>> Signaling ProducerDone to orchestrator");
+                        await _connection.InvokeAsync(OrchestratorMethods.ProducerDone);
+                    }
                     
                     // Collect, compress, and send timestamp data in batches
                     var timestampData = _worker.GetTimestampData();

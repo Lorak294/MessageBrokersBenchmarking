@@ -64,8 +64,9 @@ public class KafkaJanitor : IMqJanitor
         }
     }
 
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
         _adminClient?.Dispose();
+        return ValueTask.CompletedTask;
     }
 }

@@ -29,6 +29,12 @@ public class BenchmarkingController(
     [HttpPost("initialize")]
     public async Task<IActionResult> Initialize([FromBody] InitializeRequest request)
     {
+        var validationErrors = InitializeRequestValidator.Validate(request);
+        if (validationErrors.Count > 0)
+        {
+            return BadRequest(new { Errors = validationErrors });
+        }
+        
         logger.LogInformation("Initializing test with config: {@TestConfig}", request);
         
         try

@@ -63,8 +63,8 @@ public class PgMqJanitor : IMqJanitor
         await _pgmqClient.Queues.PurgeAsync(queueName);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _pgmqClient?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        if (_pgmqClient is not null) await _pgmqClient.DisposeAsync();
     }
 }

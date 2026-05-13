@@ -10,10 +10,11 @@ public class KafkaProducer : IMqProducer
     private KafkaConfig? _kafkaConfig;
     private CommunicationMode _communicationMode;
     
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
         _producer?.Flush();
         _producer?.Dispose();
+        return ValueTask.CompletedTask;
     }
 
     public Task InitializeAsync(MqConfig configuration)

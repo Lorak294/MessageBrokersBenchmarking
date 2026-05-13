@@ -25,21 +25,6 @@ public class TestScheduler(
                 $"Requested {totalRequired} workers ({request.ProducersCount} producers + {totalConsumers} consumers), but only {workerCount} are connected.");
         }
         
-        // Validate streaming mode constraints: RabbitMQ and PGMQ streams don't support
-        // competing consumers within a group — each consumer reads the full log independently.
-        if (request.CommunicationMode == CommunicationMode.Streaming
-            && request.MqConfig.Implementation is "RabbitMQ" or "PgMq")
-        {
-            var invalidGroups = request.ConsumerGroups.Where(g => g > 1).ToArray();
-            if (invalidGroups.Length > 0)
-            {
-                throw new InvalidOperationException(
-                    $"Streaming mode for {request.MqConfig.Implementation} does not support multiple consumers per group " +
-                    $"(each consumer reads the full log independently). Use 1 consumer per group, e.g. [{string.Join(", ", request.ConsumerGroups.Select(_ => "1"))}] " +
-                    $"instead of [{string.Join(", ", request.ConsumerGroups)}].");
-            }
-        }
-        
         logger.LogInformation("Initializing test: Mode={Mode}, Producers={Producers}, ConsumerGroups={Groups}",
             request.CommunicationMode, request.ProducersCount, request.ConsumerGroups);
         
@@ -48,11 +33,16 @@ public class TestScheduler(
         // Set expected messages per group for accurate loss calculation
         if (request.CommunicationMode == CommunicationMode.PointToPoint)
         {
-            timestampAggregator.SetExpectedMessagesPerGroup(request.GetMessagesPerGroup());
+            timestampAggregator.SetExpectedMessagesPerGroup(request.GetMessagesPerGroup(), request.ConsumerGroups.Length);
+        }
+        else
+        {
+            timestampAggregator.SetExpectedMessagesPerGroup(null, request.ConsumerGroups.Length);
         }
         
         // Reset worker state from any previous test run, then assign new roles
         workerRegistry.ResetReadiness();
+        workerRegistry.SetProducerCount(request.ProducersCount);
         
         // Janitor step: pick first worker, send PrepareInfrastructure, wait for InfrastructureReady
         var allWorkers = workerRegistry.GetAllWorkers();
@@ -165,12 +155,12 @@ public class TestScheduler(
         await hubContext.Clients.Group(OrchestratorConstants.ProducerGroup).SendAsync(OrchestratorMethods.StartTest);
         logger.LogInformation("All workers started.");
         
-        // Wait for producers to finish, then notify consumers
-        await workerRegistry.WaitForAllProducersFinishedAsync(TimeSpan.FromMinutes(30));
-        logger.LogInformation("All producers finished. Sending ProducersDone signal to consumers...");
+        // Wait for producers to signal they're done sending (without waiting for timestamp upload)
+        await workerRegistry.WaitForAllProducersDoneAsync(TimeSpan.FromMinutes(30));
+        logger.LogInformation("All producers done sending. Sending ProducersDone signal to consumers...");
         await hubContext.Clients.Group(OrchestratorConstants.ConsumerGroup).SendAsync(OrchestratorMethods.ProducersDone);
         
-        // Wait for all workers (including consumers) to finish
+        // Wait for all workers (including consumers) to finish and submit timestamps
         await workerRegistry.WaitForAllWorkersFinishedAsync(TimeSpan.FromMinutes(30));
         logger.LogInformation("All workers finished.");
         

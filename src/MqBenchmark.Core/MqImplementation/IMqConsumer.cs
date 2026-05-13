@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using MqBenchmark.Core.Config;
 
 namespace MqBenchmark.Core.MqImplementation;
@@ -6,7 +5,7 @@ namespace MqBenchmark.Core.MqImplementation;
 /// <summary>
 /// Responsible for reading anc consuming messaged from the broker.
 /// </summary>
-public interface IMqConsumer : IDisposable
+public interface IMqConsumer : IAsyncDisposable
 {
     Task InitializeAsync(MqConfig configuration);
 

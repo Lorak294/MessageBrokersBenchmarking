@@ -113,9 +113,9 @@ public class RabbitMqJanitor : IMqJanitor
             arguments: streamArgs);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _channel?.Dispose();
-        _connection?.Dispose();
+        if (_channel is not null) await _channel.DisposeAsync();
+        if (_connection is not null) await _connection.DisposeAsync();
     }
 }

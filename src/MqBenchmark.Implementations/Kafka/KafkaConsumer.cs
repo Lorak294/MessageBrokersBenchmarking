@@ -11,17 +11,17 @@ public class KafkaConsumer : IMqConsumer
     private Task? _consumptionTask;
     private bool _disposed;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
 
         _consumptionCts?.Cancel();
         
-        try
+        if (_consumptionTask != null)
         {
-            _consumptionTask?.Wait(TimeSpan.FromSeconds(5));
+            try { await _consumptionTask.WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch { }
         }
-        catch { }
 
         _consumer?.Close();
         _consumer?.Dispose();
