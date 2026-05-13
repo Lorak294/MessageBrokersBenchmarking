@@ -6,7 +6,7 @@ namespace MqBenchmark.Implementations.PgMq;
 
 public class PgMqProducer : IMqProducer
 {
-    private PgmqClient? _pgmqClient;
+    private IPgmqClient? _pgmqClient;
     private PgMqConfig? _config;
     private CommunicationMode _communicationMode;
 
@@ -16,6 +16,13 @@ public class PgMqProducer : IMqProducer
     private Timer? _lingerTimer;
     private bool _timerRunning;
     private string? _lastRoutingTarget; // Track current target for buffered flush
+
+    public PgMqProducer() { }
+
+    internal PgMqProducer(IPgmqClient pgmqClient)
+    {
+        _pgmqClient = pgmqClient;
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -46,8 +53,12 @@ public class PgMqProducer : IMqProducer
     {
         _config = configuration.ToPgMqConfig();
         _communicationMode = configuration.CommunicationMode;
-        _pgmqClient = new PgmqClient(_config.ConnectionString);
-        await _pgmqClient.OpenAsync();
+
+        if (_pgmqClient is null)
+        {
+            _pgmqClient = new PgmqClient(_config.ConnectionString);
+            await _pgmqClient.OpenAsync();
+        }
 
         // For Streaming, ensure the queue exists (producer writes directly)
         if (_communicationMode == CommunicationMode.Streaming)

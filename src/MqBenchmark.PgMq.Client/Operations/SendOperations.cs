@@ -8,7 +8,7 @@ namespace MqBenchmark.PgMq.Client.Operations;
 /// Send operations: send single messages and batches, with optional delay.
 /// All commands are lazy-prepared on first use (hot path).
 /// </summary>
-public sealed class SendOperations : PgmqOperationsBase
+public sealed class SendOperations : PgmqOperationsBase, ISendOperations
 {
     private readonly CommandSlot _sendSlot = Slot();
     private readonly CommandSlot _sendDelaySlot = Slot();

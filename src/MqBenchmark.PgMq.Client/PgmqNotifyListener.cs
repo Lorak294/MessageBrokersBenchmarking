@@ -16,7 +16,7 @@ namespace MqBenchmark.PgMq.Client;
 /// A periodic fallback sweep is recommended to catch messages missed between
 /// throttled notifications.
 /// </summary>
-public sealed class PgmqNotifyListener : IAsyncDisposable
+public sealed class PgmqNotifyListener : IPgmqNotifyListener
 {
     private readonly string _connectionString;
     private readonly string _channelName;

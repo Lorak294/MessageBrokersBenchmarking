@@ -9,7 +9,7 @@ namespace MqBenchmark.PgMq.Client.Operations;
 /// test routing, and list bindings. Send operations are lazy-prepared (hot-path for fan-out).
 /// Management operations use ad-hoc commands.
 /// </summary>
-public sealed class TopicOperations : PgmqOperationsBase
+public sealed class TopicOperations : PgmqOperationsBase, ITopicOperations
 {
     private readonly CommandSlot _sendTopicSlot = Slot();
     private readonly CommandSlot _sendTopicDelaySlot = Slot();

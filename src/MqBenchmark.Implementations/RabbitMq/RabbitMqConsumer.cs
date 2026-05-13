@@ -13,6 +13,13 @@ public class RabbitMqConsumer : IMqConsumer
     private string? _consumerTag;
     private CommunicationMode _communicationMode;
 
+    public RabbitMqConsumer() { }
+
+    internal RabbitMqConsumer(IChannel channel)
+    {
+        _channel = channel;
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_channel is not null && _consumerTag is not null)
@@ -29,15 +36,18 @@ public class RabbitMqConsumer : IMqConsumer
         _communicationMode = configuration.CommunicationMode;
         var groupName = configuration.ConsumerGroupName;
         
-        var factory = new ConnectionFactory
+        if (_channel is null)
         {
-            HostName = rabbitConfig.Hostname,
-            UserName = rabbitConfig.Username,
-            Password = rabbitConfig.Password,
-            Port = rabbitConfig.Port
-        };
-        _connection = await factory.CreateConnectionAsync();
-        _channel = await _connection.CreateChannelAsync();
+            var factory = new ConnectionFactory
+            {
+                HostName = rabbitConfig.Hostname,
+                UserName = rabbitConfig.Username,
+                Password = rabbitConfig.Password,
+                Port = rabbitConfig.Port
+            };
+            _connection = await factory.CreateConnectionAsync();
+            _channel = await _connection.CreateChannelAsync();
+        }
 
         switch (_communicationMode)
         {

@@ -19,20 +19,20 @@ namespace MqBenchmark.PgMq.Client;
 ///   var messages = await client.Read.ReadAsync("my_queue", vt: 30);
 ///   await client.DisposeAsync();
 /// </summary>
-public sealed class PgmqClient : IAsyncDisposable
+public sealed class PgmqClient : IPgmqClient
 {
     private readonly string _connectionString;
     private NpgsqlConnection? _connection;
 
     // Feature-specific operations groups — initialized in OpenAsync
-    public SendOperations Send { get; private set; } = null!;
-    public ReadOperations Read { get; private set; } = null!;
-    public PopOperations Pop { get; private set; } = null!;
-    public DeleteOperations Delete { get; private set; } = null!;
-    public ArchiveOperations Archive { get; private set; } = null!;
-    public QueueOperations Queues { get; private set; } = null!;
-    public TopicOperations Topics { get; private set; } = null!;
-    public NotifyOperations Notify { get; private set; } = null!;
+    public ISendOperations Send { get; private set; } = null!;
+    public IReadOperations Read { get; private set; } = null!;
+    public IPopOperations Pop { get; private set; } = null!;
+    public IDeleteOperations Delete { get; private set; } = null!;
+    public IArchiveOperations Archive { get; private set; } = null!;
+    public IQueueOperations Queues { get; private set; } = null!;
+    public ITopicOperations Topics { get; private set; } = null!;
+    public INotifyOperations Notify { get; private set; } = null!;
     public MetricsOperations Metrics { get; private set; } = null!;
 
     public PgmqClient(string connectionString)
@@ -77,15 +77,15 @@ public sealed class PgmqClient : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         // Dispose all operations groups (releases prepared commands)
-        if (Send is not null) await Send.DisposeAsync();
-        if (Read is not null) await Read.DisposeAsync();
-        if (Pop is not null) await Pop.DisposeAsync();
-        if (Delete is not null) await Delete.DisposeAsync();
-        if (Archive is not null) await Archive.DisposeAsync();
-        if (Queues is not null) await Queues.DisposeAsync();
-        if (Topics is not null) await Topics.DisposeAsync();
-        if (Notify is not null) await Notify.DisposeAsync();
-        await Metrics.DisposeAsync();
+        if (Send is IAsyncDisposable s) await s.DisposeAsync();
+        if (Read is IAsyncDisposable r) await r.DisposeAsync();
+        if (Pop is IAsyncDisposable p) await p.DisposeAsync();
+        if (Delete is IAsyncDisposable d) await d.DisposeAsync();
+        if (Archive is IAsyncDisposable a) await a.DisposeAsync();
+        if (Queues is IAsyncDisposable q) await q.DisposeAsync();
+        if (Topics is IAsyncDisposable t) await t.DisposeAsync();
+        if (Notify is IAsyncDisposable n) await n.DisposeAsync();
+        if (Metrics is not null) await Metrics.DisposeAsync();
 
         // Close the shared connection
         if (_connection is not null)

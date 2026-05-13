@@ -8,7 +8,7 @@ namespace MqBenchmark.PgMq.Client.Operations;
 /// Pop operations: atomically read and delete messages (no visibility timeout).
 /// Consolidated to single method with qty parameter. Lazy-prepared (hot path).
 /// </summary>
-public sealed class PopOperations : PgmqOperationsBase
+public sealed class PopOperations : PgmqOperationsBase, IPopOperations
 {
     private readonly CommandSlot _popSlot = Slot();
 

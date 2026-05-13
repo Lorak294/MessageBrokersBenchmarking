@@ -6,15 +6,25 @@ namespace MqBenchmark.Implementations.PgMq;
 
 public class PgMqJanitor : IMqJanitor
 {
-    private PgmqClient? _pgmqClient;
+    private IPgmqClient? _pgmqClient;
+
+    public PgMqJanitor() { }
+
+    internal PgMqJanitor(IPgmqClient pgmqClient)
+    {
+        _pgmqClient = pgmqClient;
+    }
 
     public async Task PrepareInfrastructureAsync(JanitorConfig config)
     {
         var pgConfig = config.MqConfig.ToPgMqConfig();
         var unlogged = pgConfig.QueueMode == PgMqConfig.QueueModeEnum.Unlogged;
 
-        _pgmqClient = new PgmqClient(pgConfig.ConnectionString);
-        await _pgmqClient.OpenAsync();
+        if (_pgmqClient is null)
+        {
+            _pgmqClient = new PgmqClient(pgConfig.ConnectionString);
+            await _pgmqClient.OpenAsync();
+        }
 
         switch (config.CommunicationMode)
         {

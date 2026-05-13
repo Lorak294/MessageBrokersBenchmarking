@@ -7,14 +7,21 @@ namespace MqBenchmark.Implementations.PgMq;
 
 public class PgMqConsumer : IMqConsumer
 {
-    private PgmqClient? _pgmqClient;
-    private PgmqNotifyListener? _notifyListener;
+    private IPgmqClient? _pgmqClient;
+    private IPgmqNotifyListener? _notifyListener;
     private PgMqConfig? _config;
     private CommunicationMode _communicationMode;
     private string? _consumeQueueName;
     private CancellationTokenSource? _consumptionCts;
     private Task? _consumptionTask;
     private bool _disposed;
+
+    public PgMqConsumer() { }
+
+    internal PgMqConsumer(IPgmqClient pgmqClient)
+    {
+        _pgmqClient = pgmqClient;
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -40,8 +47,11 @@ public class PgMqConsumer : IMqConsumer
         _communicationMode = configuration.CommunicationMode;
         var groupName = configuration.ConsumerGroupName;
         
-        _pgmqClient = new PgmqClient(_config.ConnectionString);
-        await _pgmqClient.OpenAsync();
+        if (_pgmqClient is null)
+        {
+            _pgmqClient = new PgmqClient(_config.ConnectionString);
+            await _pgmqClient.OpenAsync();
+        }
 
         var unlogged = _config.QueueMode == PgMqConfig.QueueModeEnum.Unlogged;
 

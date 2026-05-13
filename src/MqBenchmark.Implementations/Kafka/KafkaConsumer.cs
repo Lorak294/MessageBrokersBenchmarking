@@ -11,6 +11,13 @@ public class KafkaConsumer : IMqConsumer
     private Task? _consumptionTask;
     private bool _disposed;
 
+    public KafkaConsumer() { }
+
+    internal KafkaConsumer(IConsumer<Null, byte[]> consumer)
+    {
+        _consumer = consumer;
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
@@ -58,13 +65,16 @@ public class KafkaConsumer : IMqConsumer
                 throw new InvalidOperationException($"Unsupported mode: {configuration.CommunicationMode}");
         }
 
-        var consumerConfig = new ConsumerConfig
+        if (_consumer is null)
         {
-            BootstrapServers = kafkaConfig.BootstrapServers,
-            GroupId = groupId
-        };
+            var consumerConfig = new ConsumerConfig
+            {
+                BootstrapServers = kafkaConfig.BootstrapServers,
+                GroupId = groupId
+            };
 
-        _consumer = new ConsumerBuilder<Null, byte[]>(consumerConfig).Build();
+            _consumer = new ConsumerBuilder<Null, byte[]>(consumerConfig).Build();
+        }
         
         // Subscribe and wait for partition assignment
         _consumer.Subscribe(topicName);
