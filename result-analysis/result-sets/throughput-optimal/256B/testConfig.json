@@ -1,0 +1,8 @@
+{
+  "testConfig": {
+    "messageSizeInBytes": "256",
+    "messageCount": "100000",
+    "producersCount": "1",
+    "consumersCount": "5"
+  }
+}

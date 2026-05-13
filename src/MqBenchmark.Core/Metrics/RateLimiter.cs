@@ -33,7 +33,7 @@ public class RateLimiter
             while (Stopwatch.GetTimestamp() < _nextTimestamp) { }
         }
 
-        // No catch-up: if we fell behind, resume at normal pace from now
+        // If we fell behind, resume at normal pace from now
         var afterWait = Stopwatch.GetTimestamp();
         _nextTimestamp = afterWait > _nextTimestamp
             ? afterWait + _intervalTicks

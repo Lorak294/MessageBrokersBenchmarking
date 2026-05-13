@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using MqBenchmark.Core.Config;
 using MqBenchmark.Core.MqImplementation;
 using RabbitMQ.Client;
@@ -10,9 +9,9 @@ public class RabbitMqConsumer : IMqConsumer
 {
     private IConnection? _connection;
     private IChannel? _channel;
-    private string? _queueName;
+    private string? _consumeQueueName;
     private string? _consumerTag;
-    private bool _durable;
+    private CommunicationMode _communicationMode;
 
     public void Dispose()
     {
@@ -27,45 +26,67 @@ public class RabbitMqConsumer : IMqConsumer
     public async Task InitializeAsync(MqConfig configuration)
     {
         var rabbitConfig = configuration.ToRabbitMqConfig();
+        _communicationMode = configuration.CommunicationMode;
+        var groupName = configuration.ConsumerGroupName;
+        
         var factory = new ConnectionFactory
         {
             HostName = rabbitConfig.Hostname,
             UserName = rabbitConfig.Username,
             Password = rabbitConfig.Password,
-            Port = rabbitConfig.Port,
-            ConsumerDispatchConcurrency = rabbitConfig.ConsumerDispatchConcurrency
+            Port = rabbitConfig.Port
         };
         _connection = await factory.CreateConnectionAsync();
         _channel = await _connection.CreateChannelAsync();
-        _queueName = rabbitConfig.QueueName;
-        _durable = rabbitConfig.DurableMode;
-        
-        await _channel.QueueDeclareAsync(
-            queue: _queueName,
-            durable: _durable,
-            exclusive: false,
-            autoDelete: rabbitConfig.QueueAutoDelete, 
-            arguments: null
-        );
-        
-        // Purge any leftover messages from a previous test run
-        await _channel.QueuePurgeAsync(_queueName);
-        
-        // Allow the broker to send multiple messages before waiting for acks.
-        // This avoids a round-trip per message and prevents artificial queue buildup
-        // that inflates measured latency in benchmarks.
-        // await _channel.BasicQosAsync(
-        //     prefetchSize: 0,
-        //     prefetchCount: rabbitConfig.PrefetchCount,
-        //     global: false);
+
+        switch (_communicationMode)
+        {
+            case CommunicationMode.PointToPoint:
+            case CommunicationMode.PubSub:
+                // Both modes: consume from per-group queue (created by janitor)
+                _consumeQueueName = RabbitMqNaming.GroupQueue(groupName!);
+                
+                await _channel.QueueDeclareAsync(
+                    queue: _consumeQueueName,
+                    durable: rabbitConfig.DurableMode,
+                    exclusive: false,
+                    autoDelete: false,
+                    arguments: null);
+                
+                await _channel.BasicQosAsync(
+                    prefetchSize: 0,
+                    prefetchCount: rabbitConfig.PrefetchCount,
+                    global: false);
+                break;
+
+            case CommunicationMode.Streaming:
+                // All consumers read from the same stream queue
+                _consumeQueueName = RabbitMqNaming.StreamQueue();
+                
+                var streamArgs = new Dictionary<string, object?>
+                {
+                    ["x-queue-type"] = "stream"
+                };
+                await _channel.QueueDeclareAsync(
+                    queue: _consumeQueueName,
+                    durable: true,
+                    exclusive: false,
+                    autoDelete: false,
+                    arguments: streamArgs);
+                
+                await _channel.BasicQosAsync(
+                    prefetchSize: 0,
+                    prefetchCount: rabbitConfig.PrefetchCount,
+                    global: false);
+                break;
+        }
     }
 
     public async Task SubscribeAsync(Func<Message, Task> messageReceivedHandler)
     {
-        if (_channel is null || _queueName is null)
-        {
+        if (_channel is null || _consumeQueueName is null)
             throw new InvalidOperationException("Consumer is not initialized.");
-        }
+
         var consumer = new AsyncEventingBasicConsumer(_channel);
         consumer.ReceivedAsync += async (sender, eventArgs) =>
         {
@@ -73,22 +94,29 @@ public class RabbitMqConsumer : IMqConsumer
             try
             {
                 await messageReceivedHandler(message);
-
                 await ((AsyncEventingBasicConsumer)sender).Channel.BasicAckAsync(eventArgs.DeliveryTag, false);
-                // await _channel.BasicAckAsync(eventArgs.DeliveryTag, false);
             }
             catch
             {
-                // On failure, we nack the message and requeue it for later processing.
                 await ((AsyncEventingBasicConsumer)sender).Channel.BasicNackAsync(eventArgs.DeliveryTag, false, requeue: true);
-                // await _channel.BasicNackAsync(eventArgs.DeliveryTag, false, requeue: true);
-                Console.WriteLine($"Message {message.Id} processing failed - requeuing message.");
+                Console.WriteLine($"Message {message.Id} processing failed.");
             }
         };
-        
+
+        // For streaming, start reading from the beginning
+        var consumeArgs = new Dictionary<string, object?>();
+        if (_communicationMode == CommunicationMode.Streaming)
+        {
+            consumeArgs["x-stream-offset"] = "first";
+        }
+
         _consumerTag = await _channel.BasicConsumeAsync(
-            queue: _queueName,
-            autoAck: false, // Manual ack after processing
+            queue: _consumeQueueName,
+            autoAck: false,
+            consumerTag: string.Empty,
+            noLocal: false,
+            exclusive: false,
+            arguments: consumeArgs,
             consumer: consumer);
     }
 }

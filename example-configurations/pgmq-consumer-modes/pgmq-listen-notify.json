@@ -1,0 +1,23 @@
+{
+  "producersCount": 1,
+  "consumerGroups": [3],
+  "communicationMode": "PointToPoint",
+  "messagesPerConsumerGroup": [10000],
+  "messageSizeInBytes": 1024,
+  "sendFrequencyMps": 1000,
+  "mqConfig": {
+    "implementation": "PgMq",
+    "additionalSettings": {
+      "connectionString": "Host=pgmq;Port=5432;Username=postgres;Password=postgres;Database=postgres",
+      "visibilityTimeout": "30",
+      "queueMode": "NonPartitioned",
+      "messageReadMode": "Delete",
+      "consumerMode": "ListenNotify",
+      "consumerBatchSize": "50",
+      "pollIntervalMs": "5",
+      "maxPollSeconds": "5",
+      "notifyThrottleMs": "5",
+      "usePop": "true"
+    }
+  }
+}

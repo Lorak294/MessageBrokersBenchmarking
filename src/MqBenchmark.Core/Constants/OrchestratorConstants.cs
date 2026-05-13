@@ -10,6 +10,9 @@ public static class OrchestratorMethods
     public const string WorkerReady = "WorkerReady";
     public const string WorkerFinished = "WorkerFinished";
     public const string SubmitTimestampBatch = "SubmitTimestampBatch";
+    public const string ProducersDone = "ProducersDone";
+    public const string PrepareInfrastructure = "PrepareInfrastructure";
+    public const string InfrastructureReady = "InfrastructureReady";
 }
 
 /// <summary>
@@ -26,4 +29,7 @@ public static class OrchestratorConstants
     // Query params
     public const string IdKey = "workerId";
     public const string TypeKey = "type";
+    // Worker behaviour settings
+    public const int WorkerInitializationTimeoutSeconds = 30;
+    public const int ConsumerIdleWaitTimeSeconds = 10;
 }

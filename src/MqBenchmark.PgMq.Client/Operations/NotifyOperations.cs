@@ -3,6 +3,12 @@ using NpgsqlTypes;
 
 namespace MqBenchmark.PgMq.Client.Operations;
 
+public class ErrorCodes
+{
+    public const string TriggerAlreadyExistsSqlState = "42710";
+}
+
+
 /// <summary>
 /// LISTEN/NOTIFY operations: enable/disable insert notifications on queues,
 /// and create PgmqNotifyListener instances for event-driven consumption.

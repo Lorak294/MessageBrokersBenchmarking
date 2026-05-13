@@ -11,7 +11,10 @@ builder.Services.AddHealthChecks();
 builder.Services.AddSingleton<WorkerRegistry>();
 builder.Services.AddSingleton<TimestampAggregator>();
 builder.Services.AddSingleton<TestScheduler>();
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
 builder.Services.AddSignalR(options =>
 {
     // Allow long-running tests without disconnecting workers

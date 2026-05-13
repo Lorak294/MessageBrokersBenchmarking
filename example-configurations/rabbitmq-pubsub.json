@@ -1,0 +1,20 @@
+{
+  "producersCount": 2,
+  "consumerGroups": [2, 2],
+  "communicationMode": "PubSub",
+  "messageCount": 1000,
+  "messageSizeInBytes": 255,
+  "sendFrequencyMps": 200,
+  "mqConfig": {
+    "implementation": "RabbitMQ",
+    "additionalSettings": {
+      "hostname": "rabbitmq",
+      "port": "5672",
+      "username": "guest",
+      "password": "guest",
+      "prefetchCount": "100",
+      "durableMode": "false",
+      "publisherConfirms": "false"
+    }
+  }
+}

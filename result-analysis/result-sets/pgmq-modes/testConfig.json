@@ -1,0 +1,9 @@
+{
+  "title": "Porównanie opóźnienia dla trybów odczytu PGMQ",
+  "testConfig": {
+    "messageSizeInBytes": "1024",
+    "messageCount": "10000",
+    "producersCount": "1",
+    "consumersCount": "1"
+  }
+}
