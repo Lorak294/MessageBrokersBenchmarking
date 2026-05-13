@@ -1,4 +1,4 @@
-# Message Queue Benchmarking
+# Message Brokers Benchmarking
 
 A distributed benchmarking platform for comparing **Apache Kafka**, **RabbitMQ**, and **PGMQ** across throughput and end-to-end latency, using three communication patterns.
 
