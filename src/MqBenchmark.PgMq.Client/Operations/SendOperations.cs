@@ -105,7 +105,7 @@ public sealed class SendOperations : PgmqOperationsBase, ISendOperations
         return await ReadIds(reader, ct);
     }
 
-    private static string[] EncodePayloads(IReadOnlyList<byte[]> payloads)
+    internal static string[] EncodePayloads(IReadOnlyList<byte[]> payloads)
     {
         var jsonArray = new string[payloads.Count];
         for (int i = 0; i < payloads.Count; i++)

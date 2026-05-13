@@ -16,6 +16,10 @@
     &lt;Project Location="/Users/karol.kacki/repos/MessageQueuesBenchmarking/tests/MqBenchmark.Core.Tests" Presentation="&amp;lt;tests&amp;gt;\&amp;lt;MqBenchmark.Core.Tests&amp;gt;" /&gt;
     &lt;Project Location="/Users/karol.kacki/repos/MessageQueuesBenchmarking/tests/MqBenchmark.Orchestrator.Tests" Presentation="&amp;lt;tests&amp;gt;\&amp;lt;MqBenchmark.Orchestrator.Tests&amp;gt;" /&gt;
     &lt;Project Location="/Users/karol.kacki/repos/MessageQueuesBenchmarking/tests/MqBenchmark.Worker.Tests" Presentation="&amp;lt;tests&amp;gt;\&amp;lt;MqBenchmark.Worker.Tests&amp;gt;" /&gt;
+    &lt;TestAncestor&gt;
+      &lt;TestId&gt;xUnit::ABD688EE-791C-4E5A-A95C-C37E244D133E::net10.0::MqBenchmark.PgMq.Client.Tests.PgmqOperationsBaseTests&lt;/TestId&gt;
+    &lt;/TestAncestor&gt;
+    &lt;Project Location="/Users/karol.kacki/repos/MessageQueuesBenchmarking/tests/MqBenchmark.PgMq.Client.Tests" Presentation="&amp;lt;tests&amp;gt;\&amp;lt;MqBenchmark.PgMq.Client.Tests&amp;gt;" /&gt;
   &lt;/Or&gt;
 &lt;/SessionState&gt;</s:String>
 	</wpf:ResourceDictionary>

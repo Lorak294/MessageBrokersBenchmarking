@@ -1,3 +1,4 @@
+using System.Data.Common;
 using MqBenchmark.PgMq.Client.Models;
 using Npgsql;
 
@@ -69,7 +70,7 @@ public abstract class PgmqOperationsBase : IAsyncDisposable
     /// Reads a single PgmqMessage from the current reader row.
     /// Expected column order: msg_id, read_ct, enqueued_at, last_read_at, vt, message
     /// </summary>
-    protected static PgmqMessage ReadMessage(NpgsqlDataReader reader)
+    internal static PgmqMessage ReadMessage(DbDataReader reader)
     {
         var msgId = reader.GetInt64(0);          // msg_id
         var readCount = reader.GetInt32(1);       // read_ct
@@ -124,7 +125,7 @@ public abstract class PgmqOperationsBase : IAsyncDisposable
     /// <summary>
     /// Encodes a byte[] payload as a base64 string for JSONB storage.
     /// </summary>
-    protected static string EncodePayload(byte[] payload)
+    internal static string EncodePayload(byte[] payload)
     {
         return Convert.ToBase64String(payload);
     }

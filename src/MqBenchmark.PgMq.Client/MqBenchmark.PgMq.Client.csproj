@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="MqBenchmark.Implementations.Tests" />
+        <InternalsVisibleTo Include="MqBenchmark.PgMq.Client.Tests" />
     </ItemGroup>
 
     <ItemGroup>
