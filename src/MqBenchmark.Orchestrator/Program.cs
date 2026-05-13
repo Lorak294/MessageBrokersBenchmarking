@@ -1,12 +1,16 @@
 using MqBenchmark.Core.Constants;
 using MqBenchmark.Orchestrator;
+using MqBenchmark.Orchestrator.OpenApi;
 using MqBenchmark.Orchestrator.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddOperationTransformer<InitializeRequestExamplesTransformer>();
+});
 builder.Services.AddHealthChecks();
 builder.Services.AddSingleton<WorkerRegistry>();
 builder.Services.AddSingleton<TimestampAggregator>();

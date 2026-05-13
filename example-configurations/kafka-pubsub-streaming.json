@@ -2,7 +2,7 @@
   "producersCount": 2,
   "consumerGroups": [2, 2],
   "communicationMode": "PubSub",
-  "messageCount": 10000,
+  "messageCount": 1000,
   "messageSizeInBytes": 1024,
   "sendFrequencyMps": 200,
   "mqConfig": {

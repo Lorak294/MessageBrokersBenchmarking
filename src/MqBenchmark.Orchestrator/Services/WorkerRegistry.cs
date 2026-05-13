@@ -150,7 +150,10 @@ public class WorkerRegistry
         Task task;
         lock (_lock)
         {
-            if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Ready))
+            if (_workers.Values
+                    .Where(w => w.Role != WorkerRole.Unassigned)
+                    .All(w => w.State == WorkerState.Ready)
+                && _workers.Values.Any(w => w.Role != WorkerRole.Unassigned))
             {
                 return Task.CompletedTask;
             }
@@ -284,7 +287,8 @@ public class WorkerRegistry
     private void CheckReadiness()
     {
         // Internal helper: assumes lock is already held
-        if (_workers.Count > 0 && _workers.Values.All(w => w.State == WorkerState.Ready))
+        var assigned = _workers.Values.Where(w => w.Role != WorkerRole.Unassigned).ToList();
+        if (assigned.Count > 0 && assigned.All(w => w.State == WorkerState.Ready))
         {
             _allWorkersReadyTcs?.TrySetResult();
         }

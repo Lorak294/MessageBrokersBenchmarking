@@ -3,7 +3,7 @@
   "consumerGroups": [2, 2],
   "communicationMode": "Streaming",
   "messageCount": 1000,
-  "messageSizeInBytes": 255,
+  "messageSizeInBytes": 1024,
   "sendFrequencyMps": 200,
   "mqConfig": {
     "implementation": "PgMq",

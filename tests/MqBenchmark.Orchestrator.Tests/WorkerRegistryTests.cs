@@ -37,6 +37,8 @@ public class WorkerRegistryTests
         _registry.RegisterWorker(id1, "c1");
         _registry.RegisterWorker(id2, "c2");
         _registry.ResetReadiness();
+        _registry.SetWorkerRole(id1, WorkerRole.Producer);
+        _registry.SetWorkerRole(id2, WorkerRole.Consumer);
 
         // Act
         var waitTask = _registry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(5));
@@ -58,12 +60,34 @@ public class WorkerRegistryTests
         var id = Guid.NewGuid();
         _registry.RegisterWorker(id, "c1");
         _registry.ResetReadiness();
+        _registry.SetWorkerRole(id, WorkerRole.Producer);
         _registry.UpdateWorkerState(id, WorkerState.Ready);
 
         // Act
         var task = _registry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(1));
 
         // Assert
+        task.IsCompleted.Should().BeTrue();
+        await task;
+    }
+
+    [Fact]
+    public async Task WaitForAllWorkersReady_IgnoresUnassignedWorkers()
+    {
+        // Arrange
+        var assigned = Guid.NewGuid();
+        var idle = Guid.NewGuid();
+        _registry.RegisterWorker(assigned, "c1");
+        _registry.RegisterWorker(idle, "c2");
+        _registry.ResetReadiness();
+        _registry.SetWorkerRole(assigned, WorkerRole.Producer);
+        // idle remains Unassigned
+
+        // Act
+        _registry.UpdateWorkerState(assigned, WorkerState.Ready);
+        var task = _registry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(1));
+
+        // Assert — completes even though idle worker is not Ready
         task.IsCompleted.Should().BeTrue();
         await task;
     }
