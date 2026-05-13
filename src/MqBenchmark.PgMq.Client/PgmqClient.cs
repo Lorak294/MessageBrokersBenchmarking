@@ -85,7 +85,7 @@ public sealed class PgmqClient : IAsyncDisposable
         if (Queues is not null) await Queues.DisposeAsync();
         if (Topics is not null) await Topics.DisposeAsync();
         if (Notify is not null) await Notify.DisposeAsync();
-        if (Metrics is not null) await Metrics.DisposeAsync();
+        await Metrics.DisposeAsync();
 
         // Close the shared connection
         if (_connection is not null)

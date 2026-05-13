@@ -194,7 +194,7 @@ public class Worker(
     /// <summary>
     /// Round-robins across routing targets, skipping exhausted ones.
     /// </summary>
-    private class RoundRobinRoutingIterator
+    internal class RoundRobinRoutingIterator
     {
         private readonly (string target, int remaining)[] _targets;
         private int _currentIndex;
