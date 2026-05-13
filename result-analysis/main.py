@@ -9,6 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 
+# ── Constants ──────────────────────────────────────────────────────────────────
 plt.rcParams.update(
     {
         "font.size": 14,
@@ -19,9 +20,6 @@ plt.rcParams.update(
         "legend.fontsize": 11,
     }
 )
-
-
-# ── Constants ──────────────────────────────────────────────────────────────────
 
 TICKS_PER_MS = 10_000
 TICKS_PER_SEC = 10_000_000
@@ -38,7 +36,6 @@ COLOR_MAP = {
 }
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
-
 
 def load_config():
     config_path = os.path.join(SCRIPT_DIR, "config.json")
@@ -475,6 +472,49 @@ def plot_latency_percentile_bars(groups, all_metrics, output_dir, title):
         plt.show()
 
 
+def save_latency_summary_table(groups, all_metrics, output_dir):
+    """Save a single aggregated table with P50/P95/P99 for all groups and brokers."""
+    mq_names = collect_all_mq_names(groups)
+
+    group_w = 20
+    broker_w = 15
+    val_w = 12
+
+    lines = []
+    header = (
+        f"{'Grupa':<{group_w}}"
+        f"{'Broker':<{broker_w}}"
+        f"{'P50 (ms)':>{val_w}}"
+        f"{'P95 (ms)':>{val_w}}"
+        f"{'P99 (ms)':>{val_w}}"
+    )
+    lines.append(header)
+    lines.append("-" * len(header))
+
+    for g in groups:
+        for j, mq in enumerate(mq_names):
+            m = all_metrics.get((g["name"], mq))
+            if m is None:
+                continue
+            group_label = g["name"] if j == 0 else ""
+            lines.append(
+                f"{group_label:<{group_w}}"
+                f"{mq:<{broker_w}}"
+                f"{m['p50_ms']:>{val_w}}"
+                f"{m['p95_ms']:>{val_w}}"
+                f"{m['p99_ms']:>{val_w}}"
+            )
+        lines.append("")
+
+    output = "\n".join(lines)
+    print(output)
+
+    path = os.path.join(output_dir, "latency_summary_table.txt")
+    with open(path, "w") as f:
+        f.write(output + "\n")
+    print(f"Saved: {path}")
+
+
 def run_latency(
     mode_config, output_dir, warmup_skip=None, rolling_window=500, aggregated=False
 ):
@@ -517,6 +557,7 @@ def run_latency(
 
     if aggregated:
         plot_latency_percentile_bars(groups, all_metrics, output_dir, title)
+        save_latency_summary_table(groups, all_metrics, output_dir)
 
 
 # ── Messaging modes ────────────────────────────────────────────────────────────
@@ -779,8 +820,8 @@ def main():
     parser.add_argument(
         "--rolling",
         type=int,
-        default=500,
-        help="Rolling window size for latency-over-time plots. Use 0 to disable smoothing. Default: 500.",
+        default=100,
+        help="Rolling window size for latency-over-time plots. Use 0 to disable smoothing. Default: 100.",
     )
     args = parser.parse_args()
 

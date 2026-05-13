@@ -8,14 +8,13 @@ public static class MqConfigRabbitMqExtensions
     {
         return new RabbitMqConfig
         {
-            Hostname = configuration.GetRequiredSetting("Hostname"),
-            Port = int.Parse(configuration.GetRequiredSetting("Port")),
-            Username = configuration.GetRequiredSetting("Username"),
-            Password = configuration.GetRequiredSetting("Password"),
-            DurableMode = bool.Parse(configuration.GetOptionalSetting("DurableMode", "false")),
-            PrefetchCount = ushort.Parse(configuration.GetOptionalSetting("PrefetchCount", "100")),
-            ConsumerDispatchConcurrency = ushort.Parse(configuration.GetOptionalSetting("ConsumerDispatchConcurrency", "1")),
-            PublisherConfirms = bool.Parse(configuration.GetOptionalSetting("PublisherConfirms", "false"))
+            Hostname = configuration.GetRequiredSetting("hostname"),
+            Port = int.Parse(configuration.GetRequiredSetting("port")),
+            Username = configuration.GetRequiredSetting("username"),
+            Password = configuration.GetRequiredSetting("password"),
+            DurableMode = bool.Parse(configuration.GetOptionalSetting("durableMode", "false")),
+            PrefetchCount = ushort.Parse(configuration.GetOptionalSetting("prefetchCount", "100")),
+            PublisherConfirms = bool.Parse(configuration.GetOptionalSetting("publisherConfirms", "false"))
         };
     }
 }
@@ -32,17 +31,12 @@ public record RabbitMqConfig
     /// Number of messages the broker sends to the consumer before waiting for acks.
     /// Higher values improve throughput; lower values give fairer dispatch across consumers.
     /// </summary>
-    public ushort PrefetchCount { get; init; } = 100;
-    
-    /// <summary>
-    /// Number of concurrent message handlers dispatched by the client.
-    /// </summary>
-    public ushort ConsumerDispatchConcurrency { get; init; } = 1;
+    public ushort PrefetchCount { get; init; }
     
     /// <summary>
     /// When true, enables publisher confirms on the channel.
     /// </summary>
-    public bool PublisherConfirms { get; init; } = false;
+    public bool PublisherConfirms { get; init; }
 }
 
 /// <summary>

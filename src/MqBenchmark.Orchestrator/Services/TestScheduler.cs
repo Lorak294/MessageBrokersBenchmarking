@@ -43,7 +43,6 @@ public class TestScheduler(
         logger.LogInformation("Initializing test: Mode={Mode}, Producers={Producers}, ConsumerGroups={Groups}",
             request.CommunicationMode, request.ProducersCount, request.ConsumerGroups);
         
-        // Reset timestamp aggregator for new test
         timestampAggregator.Reset();
         
         // Set expected messages per group for accurate loss calculation
@@ -58,7 +57,6 @@ public class TestScheduler(
         // Janitor step: pick first worker, send PrepareInfrastructure, wait for InfrastructureReady
         var allWorkers = workerRegistry.GetAllWorkers();
         var janitorWorker = allWorkers.First();
-        
         var janitorConfig = new JanitorConfig
         {
             MqConfig = request.MqConfig with { CommunicationMode = request.CommunicationMode, ConsumerGroupCount = request.ConsumerGroups.Length },
@@ -71,14 +69,13 @@ public class TestScheduler(
             OrchestratorMethods.PrepareInfrastructure, janitorConfig);
         
         await workerRegistry.WaitForInfrastructureReadyAsync(TimeSpan.FromSeconds(30));
-        logger.LogInformation("Infrastructure ready. Proceeding with worker assignment.");
+        logger.LogInformation("Infrastructure ready. Proceeding with worker assignment...");
         
         await AssignWorkersAsync(allWorkers, request);
         
-        // Build routing plan for producers (only meaningful in PointToPoint)
+        // Build routing plan for producers
         RoutingPlan? routingPlan = null;
         int totalMessageCount = request.GetTotalMessageCount();
-        
         if (request.CommunicationMode == CommunicationMode.PointToPoint)
         {
             var perGroup = request.GetMessagesPerGroup();
@@ -150,27 +147,27 @@ public class TestScheduler(
                             ConsumerGroupName = $"group_{groupIndex}",
                             ConsumerGroupCount = request.ConsumerGroups.Length,
                         },
-                        ConsumerIdleTimeoutSeconds = request.ConsumerIdleTimeoutSeconds,
+                        ConsumerIdleTimeoutSeconds = OrchestratorConstants.ConsumerIdleWaitTimeSeconds,
                     });
                 consumerIndex++;
             }
         }
         
         // throws TimeoutException on timeout
-        await workerRegistry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(30));
+        await workerRegistry.WaitForAllWorkersReadyAsync(TimeSpan.FromSeconds(OrchestratorConstants.WorkerInitializationTimeoutSeconds));
         logger.LogInformation("All workers acknowledged initialization.");
     }
     
     public async Task<BenchmarkResults> StartTestAsync()
     {
-        logger.LogInformation("Starting benchmark test on all workers.");
+        logger.LogInformation("Starting benchmark test on all workers...");
         await hubContext.Clients.Group(OrchestratorConstants.ConsumerGroup).SendAsync(OrchestratorMethods.StartTest);
         await hubContext.Clients.Group(OrchestratorConstants.ProducerGroup).SendAsync(OrchestratorMethods.StartTest);
         logger.LogInformation("All workers started.");
         
         // Wait for producers to finish, then notify consumers
         await workerRegistry.WaitForAllProducersFinishedAsync(TimeSpan.FromMinutes(30));
-        logger.LogInformation("All producers finished. Sending ProducersDone signal to consumers.");
+        logger.LogInformation("All producers finished. Sending ProducersDone signal to consumers...");
         await hubContext.Clients.Group(OrchestratorConstants.ConsumerGroup).SendAsync(OrchestratorMethods.ProducersDone);
         
         // Wait for all workers (including consumers) to finish

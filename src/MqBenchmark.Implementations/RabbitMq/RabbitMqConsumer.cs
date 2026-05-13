@@ -34,8 +34,7 @@ public class RabbitMqConsumer : IMqConsumer
             HostName = rabbitConfig.Hostname,
             UserName = rabbitConfig.Username,
             Password = rabbitConfig.Password,
-            Port = rabbitConfig.Port,
-            ConsumerDispatchConcurrency = rabbitConfig.ConsumerDispatchConcurrency
+            Port = rabbitConfig.Port
         };
         _connection = await factory.CreateConnectionAsync();
         _channel = await _connection.CreateChannelAsync();

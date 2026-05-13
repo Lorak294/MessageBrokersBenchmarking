@@ -8,23 +8,22 @@ public static class MqConfigPgMqExtensions
     {
         return new PgMqConfig
         {
-            ConnectionString = configuration.GetRequiredSetting("ConnectionString"),
-            VisibilityTimeout = int.Parse(configuration.GetOptionalSetting("VisibilityTimeout", "30")),
+            ConnectionString = configuration.GetRequiredSetting("connectionString"),
+            VisibilityTimeout = int.Parse(configuration.GetOptionalSetting("visibilityTimeout", "30")),
             QueueMode = Enum.Parse<PgMqConfig.QueueModeEnum>(
-                configuration.GetOptionalSetting("QueueMode", "NonPartitioned")),
+                configuration.GetOptionalSetting("queueMode", "Default")),
             MessageReadMode = Enum.Parse<PgMqConfig.ReadModeEnum>(
-                configuration.GetOptionalSetting("MessageReadMode", "Delete")),
+                configuration.GetOptionalSetting("messageReadMode", "Delete")),
             ConsumerMode = Enum.Parse<PgMqConfig.ConsumerModeEnum>(
-                configuration.GetOptionalSetting("ConsumerMode", "ClientPoll")),
-            PollIntervalMs = int.Parse(configuration.GetOptionalSetting("PollIntervalMs", "100")),
-            MaxPollSeconds = int.Parse(configuration.GetOptionalSetting("MaxPollSeconds", "5")),
-            NotifyThrottleMs = int.Parse(configuration.GetOptionalSetting("NotifyThrottleMs", "250")),
-            DelaySeconds = int.Parse(configuration.GetOptionalSetting("DelaySeconds", "0")),
-            UsePop = bool.Parse(configuration.GetOptionalSetting("UsePop", "true")),
-            UseBufferedProducer = bool.Parse(configuration.GetOptionalSetting("UseBufferedProducer", "false")),
-            ProducerBatchSize = int.Parse(configuration.GetOptionalSetting("ProducerBatchSize", "100")),
-            ProducerLingerMs = int.Parse(configuration.GetOptionalSetting("ProducerLingerMs", "5")),
-            ConsumerBatchSize = int.Parse(configuration.GetOptionalSetting("ConsumerBatchSize", "1"))
+                configuration.GetOptionalSetting("consumerMode", "ClientPoll")),
+            PollIntervalMs = int.Parse(configuration.GetOptionalSetting("pollIntervalMs", "5")),
+            MaxPollSeconds = int.Parse(configuration.GetOptionalSetting("maxPollSeconds", "5")),
+            NotifyThrottleMs = int.Parse(configuration.GetOptionalSetting("notifyThrottleMs", "5")),
+            UsePop = bool.Parse(configuration.GetOptionalSetting("usePop", "true")),
+            UseBufferedProducer = bool.Parse(configuration.GetOptionalSetting("useBufferedProducer", "false")),
+            ProducerBatchSize = int.Parse(configuration.GetOptionalSetting("producerBatchSize", "100")),
+            ProducerLingerMs = int.Parse(configuration.GetOptionalSetting("producerLingerMs", "5")),
+            ConsumerBatchSize = int.Parse(configuration.GetOptionalSetting("consumerBatchSize", "1"))
         };
     }
 }
@@ -39,17 +38,14 @@ public record PgMqConfig
     /// <summary>Consumer strategy. Default: ClientPoll.</summary>
     public ConsumerModeEnum ConsumerMode { get; init; } = ConsumerModeEnum.ClientPoll;
 
-    /// <summary>Polling interval in ms when no messages are available. Default: 100ms.</summary>
-    public int PollIntervalMs { get; init; } = 100;
+    /// <summary>Polling interval in ms when no messages are available. Default: 5ms.</summary>
+    public int PollIntervalMs { get; init; }
 
     /// <summary>Maximum seconds to block in server-side polling. Default: 5.</summary>
-    public int MaxPollSeconds { get; init; } = 5;
+    public int MaxPollSeconds { get; init; }
 
-    /// <summary>Throttle interval in ms for LISTEN/NOTIFY notifications. Default: 10ms.</summary>
-    public int NotifyThrottleMs { get; init; } = 10;
-
-    /// <summary>Delay in seconds before messages become visible. Default: 0.</summary>
-    public int DelaySeconds { get; init; } = 0;
+    /// <summary>Throttle interval in ms for LISTEN/NOTIFY notifications. Default: 5ms.</summary>
+    public int NotifyThrottleMs { get; init; }
 
     /// <summary>Use pgmq.pop() for atomic read+delete. Default: true.</summary>
     public bool UsePop { get; init; } = true;
@@ -58,15 +54,15 @@ public record PgMqConfig
     public bool UseBufferedProducer { get; init; } = false;
 
     /// <summary>Batch size for buffered producer. Default: 100.</summary>
-    public int ProducerBatchSize { get; init; } = 100;
+    public int ProducerBatchSize { get; init; }
 
     /// <summary>Linger time in ms for buffered producer. Default: 5.</summary>
-    public int ProducerLingerMs { get; init; } = 5;
+    public int ProducerLingerMs { get; init; }
 
     /// <summary>Messages to read per consumer round-trip. Default: 1.</summary>
-    public int ConsumerBatchSize { get; init; } = 1;
+    public int ConsumerBatchSize { get; init; }
 
-    public enum QueueModeEnum { NonPartitioned, Unlogged }
+    public enum QueueModeEnum { Default, Unlogged }
     public enum ReadModeEnum { Delete, Archive }
     public enum ConsumerModeEnum { ClientPoll, ServerPoll, ListenNotify }
 }

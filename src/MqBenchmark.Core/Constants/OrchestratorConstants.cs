@@ -29,4 +29,7 @@ public static class OrchestratorConstants
     // Query params
     public const string IdKey = "workerId";
     public const string TypeKey = "type";
+    // Worker behaviour settings
+    public const int WorkerInitializationTimeoutSeconds = 30;
+    public const int ConsumerIdleWaitTimeSeconds = 10;
 }

@@ -1,5 +1,9 @@
 namespace MqBenchmark.Core.MqImplementation;
 
+/// <summary>
+/// Message class representing the payload sent between producer and consumer.
+/// Minimum size is 16 bytes to accommodate the ID.
+/// </summary>
 public record Message
 {
     private const int IdSize = 16; // Guid is 16 bytes

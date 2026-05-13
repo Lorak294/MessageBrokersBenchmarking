@@ -11,16 +11,18 @@ public class WorkerConfig
     
     public required string WorkerRole { get; set; }
     public required MqConfig MqConfig { get; set; }
+    
     /// <summary>
     /// Total messages this producer will send, or pre-allocation hint for consumers.
     /// </summary>
     public required int MessageCount { get; set; }
     public required int MessageSizeInBytes { get; set; }
     public int? SendFrequencyMps { get; set; }
+    
     /// <summary>
     /// After receiving ProducersDone signal, how long to wait with no messages before stopping.
     /// </summary>
-    public int ConsumerIdleTimeoutSeconds { get; set; } = 15;
+    public int ConsumerIdleTimeoutSeconds { get; set; }
     
     /// <summary>
     /// Routing plan for producers in PointToPoint mode.

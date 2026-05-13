@@ -1,0 +1,20 @@
+{
+  "producersCount": 2,
+  "consumerGroups": [2, 2],
+  "communicationMode": "Streaming",
+  "messageCount": 1000,
+  "messageSizeInBytes": 255,
+  "sendFrequencyMps": 200,
+  "mqConfig": {
+    "implementation": "PgMq",
+    "additionalSettings": {
+      "connectionString": "Host=pgmq;Port=5432;Username=postgres;Password=postgres;Database=postgres",
+      "visibilityTimeout": "600",
+      "queueMode": "Default",
+      "messageReadMode": "Archive",
+      "consumerMode": "ClientPoll",
+      "pollIntervalMs": "5",
+      "usePop": "true"
+    }
+  }
+}

@@ -107,28 +107,19 @@ public class PgMqProducer : IMqProducer
             case CommunicationMode.PointToPoint:
                 // Route to specific group via topic routing key
                 var groupKey = PgMqNaming.GroupRoutingKey(routingTarget ?? throw new InvalidOperationException("PointToPoint requires a routing target."));
-                if (_config!.DelaySeconds > 0)
-                    await _pgmqClient!.Topics.SendAsync(groupKey, message.Payload, _config.DelaySeconds);
-                else
-                    await _pgmqClient!.Topics.SendAsync(groupKey, message.Payload);
+                await _pgmqClient!.Topics.SendAsync(groupKey, message.Payload);
                 break;
 
             case CommunicationMode.PubSub:
                 // Broadcast to all groups via broadcast routing key
                 var broadcastKey = PgMqNaming.BroadcastRoutingKey();
-                if (_config!.DelaySeconds > 0)
-                    await _pgmqClient!.Topics.SendAsync(broadcastKey, message.Payload, _config.DelaySeconds);
-                else
-                    await _pgmqClient!.Topics.SendAsync(broadcastKey, message.Payload);
+                await _pgmqClient!.Topics.SendAsync(broadcastKey, message.Payload);
                 break;
 
             case CommunicationMode.Streaming:
                 // Write directly to shared stream queue
                 var queueName = PgMqNaming.StreamQueue();
-                if (_config!.DelaySeconds > 0)
-                    await _pgmqClient!.Send.SendAsync(queueName, message.Payload, _config.DelaySeconds);
-                else
-                    await _pgmqClient!.Send.SendAsync(queueName, message.Payload);
+                await _pgmqClient!.Send.SendAsync(queueName, message.Payload);
                 break;
         }
     }
@@ -146,26 +137,17 @@ public class PgMqProducer : IMqProducer
         {
             case CommunicationMode.PointToPoint:
                 var groupKey = PgMqNaming.GroupRoutingKey(_lastRoutingTarget!);
-                if (_config!.DelaySeconds > 0)
-                    await _pgmqClient!.Topics.SendBatchAsync(groupKey, payloads, _config.DelaySeconds);
-                else
-                    await _pgmqClient!.Topics.SendBatchAsync(groupKey, payloads);
+                await _pgmqClient!.Topics.SendBatchAsync(groupKey, payloads);
                 break;
 
             case CommunicationMode.PubSub:
                 var broadcastKey = PgMqNaming.BroadcastRoutingKey();
-                if (_config!.DelaySeconds > 0)
-                    await _pgmqClient!.Topics.SendBatchAsync(broadcastKey, payloads, _config.DelaySeconds);
-                else
-                    await _pgmqClient!.Topics.SendBatchAsync(broadcastKey, payloads);
+                await _pgmqClient!.Topics.SendBatchAsync(broadcastKey, payloads);
                 break;
 
             case CommunicationMode.Streaming:
                 var queueName = PgMqNaming.StreamQueue();
-                if (_config!.DelaySeconds > 0)
-                    await _pgmqClient!.Send.SendBatchAsync(queueName, payloads, _config.DelaySeconds);
-                else
-                    await _pgmqClient!.Send.SendBatchAsync(queueName, payloads);
+                await _pgmqClient!.Send.SendBatchAsync(queueName, payloads);
                 break;
         }
     }

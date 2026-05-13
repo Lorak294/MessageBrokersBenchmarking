@@ -14,7 +14,7 @@ public record InitializeRequest
     
     /// <summary>
     /// Total messages to produce. Used for PubSub and Streaming modes.
-    /// For PointToPoint, derived from MessagesPerConsumerGroup if that is set.
+    /// For PointToPoint, derived from MessagesPerConsumerGroup if that is set, if not set, divided equally across groups.
     /// </summary>
     public int? MessageCount { get; set; }
     
@@ -27,7 +27,6 @@ public record InitializeRequest
     
     public int MessageSizeInBytes { get; set; }
     public int? SendFrequencyMps { get; set; }
-    public int ConsumerIdleTimeoutSeconds { get; set; } = 15;
     public required MqConfig MqConfig { get; set; }
 
     public int TotalConsumersCount => ConsumerGroups.Sum();

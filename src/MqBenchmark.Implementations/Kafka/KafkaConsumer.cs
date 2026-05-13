@@ -61,19 +61,17 @@ public class KafkaConsumer : IMqConsumer
         var consumerConfig = new ConsumerConfig
         {
             BootstrapServers = kafkaConfig.BootstrapServers,
-            GroupId = groupId,
-            AutoOffsetReset = kafkaConfig.AutoOffsetReset,
-            EnableAutoCommit = kafkaConfig.EnableAutoCommit,
+            GroupId = groupId
         };
 
         _consumer = new ConsumerBuilder<Null, byte[]>(consumerConfig).Build();
         
         // Subscribe and wait for partition assignment
         _consumer.Subscribe(topicName);
-        var deadline = DateTime.UtcNow.AddSeconds(15);
+        var deadline = DateTime.UtcNow.AddSeconds(KafkaConstants.PartitionAssignmentTimeoutSeconds);
         while (DateTime.UtcNow < deadline)
         {
-            _consumer.Consume(TimeSpan.FromMilliseconds(500));
+            _consumer.Consume(TimeSpan.FromMilliseconds(KafkaConstants.ConsumePollTimeoutMs));
             if (_consumer.Assignment.Count > 0) break;
         }
         

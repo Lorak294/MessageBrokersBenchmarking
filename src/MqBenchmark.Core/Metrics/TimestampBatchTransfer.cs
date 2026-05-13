@@ -5,7 +5,7 @@ namespace MqBenchmark.Core.Metrics;
 
 public static class TimestampBatchTransfer
 {
-    public const int DefaultBatchSize = 5_000;
+    private const int DefaultBatchSize = 5_000;
     
     public static List<CompressedTimestampBatch> CompressBatches(WorkerTimestampData data, int batchSize = DefaultBatchSize)
     {

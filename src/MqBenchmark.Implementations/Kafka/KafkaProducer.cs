@@ -24,10 +24,9 @@ public class KafkaProducer : IMqProducer
         _producer = new ProducerBuilder<Null, byte[]>(new ProducerConfig
         {
             BootstrapServers = _kafkaConfig.BootstrapServers,
-            Acks = _kafkaConfig.Acks,
+            Acks = Acks.All,
             LingerMs = _kafkaConfig.LingerMs,
-            BatchSize = _kafkaConfig.BatchSize,
-            EnableIdempotence = _kafkaConfig.EnableIdempotence,
+            BatchSize = _kafkaConfig.BatchSize
         }).Build();
         
         return Task.CompletedTask;
@@ -57,7 +56,7 @@ public class KafkaProducer : IMqProducer
             }
             catch (ProduceException<Null, byte[]> ex) when (ex.Error.Code == ErrorCode.Local_QueueFull)
             {
-                _producer.Flush(TimeSpan.FromSeconds(5));
+                _producer.Flush(TimeSpan.FromMilliseconds(KafkaConstants.FlushTimeoutMs));
                 _producer.Produce(topicName, kafkaMessage);
             }
         }

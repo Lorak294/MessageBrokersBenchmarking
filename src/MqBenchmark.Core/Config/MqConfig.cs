@@ -17,6 +17,9 @@ public record MqConfig
     /// </summary>
     public int ConsumerGroupCount { get; set; }
     
+    /// <summary>
+    /// Dictionary for any additional implementation-specific settings for given broker.
+    /// </summary>
     public Dictionary<string,string> AdditionalSettings { get; set; } = new();
 
     public string GetRequiredSetting(string key)

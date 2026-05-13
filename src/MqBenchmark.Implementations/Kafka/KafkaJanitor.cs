@@ -24,14 +24,15 @@ public class KafkaJanitor : IMqJanitor
                 for (int i = 0; i < config.ConsumerGroups.Length; i++)
                 {
                     var topicName = KafkaNaming.GroupTopic($"group_{i}");
-                    await EnsureTopicClean(topicName, kafkaConfig.NumPartitions);
+                    await EnsureTopicClean(topicName, config.ConsumerGroups[i]);
                 }
                 break;
 
             case CommunicationMode.PubSub:
             case CommunicationMode.Streaming:
                 // Single shared topic
-                await EnsureTopicClean(KafkaNaming.SharedTopic(), kafkaConfig.NumPartitions);
+                var maxConsumerGroupCont = config.ConsumerGroups.Max();
+                await EnsureTopicClean(KafkaNaming.SharedTopic(), maxConsumerGroupCont);
                 break;
         }
     }
